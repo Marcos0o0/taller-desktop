@@ -1,19 +1,20 @@
-import React from 'react';
-import { Card, Space, Select, Input, Slider, DatePicker, Row, Col, Button, Typography } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Card, Space, Select, Input, Row, Col, Button, Typography, Collapse, Form } from 'antd';
 import { SearchOutlined, FilterOutlined, ClearOutlined } from '@ant-design/icons';
+import { getSpecsForCategory, CategorySpec } from '@types/product-specifications.types';
 
-const { RangePicker } = DatePicker;
 const { Text } = Typography;
+const { Panel } = Collapse;
 
 interface AdvancedFiltersProps {
   searchText: string;
   categoryFilter: string;
   stockFilter: string;
-  priceRange: [number, number];
+  specificationFilters: Record<string, any>;
   onSearchChange: (value: string) => void;
   onCategoryChange: (value: string) => void;
   onStockFilterChange: (value: string) => void;
-  onPriceRangeChange: (value: [number, number]) => void;
+  onSpecificationFiltersChange: (filters: Record<string, any>) => void;
   onClear: () => void;
 }
 
@@ -21,15 +22,75 @@ const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
   searchText,
   categoryFilter,
   stockFilter,
-  priceRange,
+  specificationFilters,
   onSearchChange,
   onCategoryChange,
   onStockFilterChange,
-  onPriceRangeChange,
+  onSpecificationFiltersChange,
   onClear,
 }) => {
+  const [form] = Form.useForm();
+  const [categorySpecs, setCategorySpecs] = useState<CategorySpec[]>([]);
+
+  useEffect(() => {
+    if (categoryFilter && categoryFilter !== 'all') {
+      const specs = getSpecsForCategory(categoryFilter);
+      setCategorySpecs(specs);
+      
+      // Resetear filtros de especificaciones cuando cambia la categoría
+      form.resetFields(specs.map(s => s.field));
+    } else {
+      setCategorySpecs([]);
+    }
+  }, [categoryFilter]);
+
+  const handleSpecificationChange = (field: string, value: any) => {
+    const newFilters = { ...specificationFilters, [field]: value };
+    // Remover filtros vacíos
+    Object.keys(newFilters).forEach(key => {
+      if (!newFilters[key] || newFilters[key] === '') {
+        delete newFilters[key];
+      }
+    });
+    onSpecificationFiltersChange(newFilters);
+  };
+
+  const renderSpecificationFilter = (spec: CategorySpec) => {
+    const commonProps = {
+      size: 'large' as const,
+      placeholder: `Filtrar por ${spec.label}`,
+      allowClear: true,
+      style: { width: '100%' },
+    };
+
+    switch (spec.type) {
+      case 'select':
+        return (
+          <Select
+            {...commonProps}
+            value={specificationFilters[spec.field]}
+            onChange={(value) => handleSpecificationChange(spec.field, value)}
+            options={[
+              { value: '', label: `Todos` },
+              ...(spec.options?.map(opt => ({ value: opt, label: opt })) || [])
+            ]}
+          />
+        );
+      case 'text':
+      case 'number':
+      default:
+        return (
+          <Input
+            {...commonProps}
+            value={specificationFilters[spec.field]}
+            onChange={(e) => handleSpecificationChange(spec.field, e.target.value)}
+          />
+        );
+    }
+  };
+
   return (
-    <Card 
+    <Card
       title={
         <Space>
           <FilterOutlined />
@@ -37,11 +98,7 @@ const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
         </Space>
       }
       extra={
-        <Button 
-          icon={<ClearOutlined />} 
-          onClick={onClear}
-          type="link"
-        >
+        <Button icon={<ClearOutlined />} onClick={onClear} type="link">
           Limpiar Filtros
         </Button>
       }
@@ -67,7 +124,7 @@ const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
           />
         </div>
 
-        {/* Filtros de categoría y stock */}
+        {/* Filtros básicos */}
         <Row gutter={16}>
           <Col xs={24} sm={12} md={8}>
             <div>
@@ -115,26 +172,42 @@ const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
               </Select>
             </div>
           </Col>
-
-          <Col xs={24} sm={24} md={8}>
-            <div>
-              <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                Rango de Precio: ${priceRange[0].toLocaleString('es-CL')} - ${priceRange[1].toLocaleString('es-CL')}
-              </Text>
-              <Slider
-                range
-                min={0}
-                max={1000000}
-                step={1000}
-                value={priceRange}
-                onChange={onPriceRangeChange}
-                tooltip={{
-                  formatter: (value) => `$${value?.toLocaleString('es-CL')}`
-                }}
-              />
-            </div>
-          </Col>
         </Row>
+
+        {/* Filtros de especificaciones (solo si hay una categoría seleccionada) */}
+        {categorySpecs.length > 0 && (
+          <Collapse ghost>
+            <Panel
+              header={
+                <Space>
+                  <FilterOutlined style={{ color: '#1890ff' }} />
+                  <Text strong>Filtros Específicos por Categoría</Text>
+                  {Object.keys(specificationFilters).length > 0 && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      ({Object.keys(specificationFilters).length} filtros activos)
+                    </Text>
+                  )}
+                </Space>
+              }
+              key="1"
+            >
+              <Form form={form}>
+                <Row gutter={16}>
+                  {categorySpecs.map((spec) => (
+                    <Col xs={24} sm={12} md={8} key={spec.field}>
+                      <div style={{ marginBottom: 16 }}>
+                        <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                          {spec.label}
+                        </Text>
+                        {renderSpecificationFilter(spec)}
+                      </div>
+                    </Col>
+                  ))}
+                </Row>
+              </Form>
+            </Panel>
+          </Collapse>
+        )}
       </Space>
     </Card>
   );

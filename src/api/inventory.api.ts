@@ -13,6 +13,7 @@ export interface Product {
   minStock: number;
   location?: string;
   supplier?: string;
+  specifications?: Record<string, any>; // 🔥 NUEVO: Campo para especificaciones técnicas
   isActive: boolean;
   isDeleted: boolean;
   createdAt: string;
@@ -45,6 +46,7 @@ export interface CreateProductRequest {
   minStock: number;
   location?: string;
   supplier?: string;
+  specifications?: Record<string, any>; // 🔥 NUEVO: Campo para especificaciones técnicas
 }
 
 export interface StockMovement {

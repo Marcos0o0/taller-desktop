@@ -35,6 +35,8 @@ import { useBarcodeScanner } from '@hooks/useBarcodeScanner';
 import ProductFormModal from '@components/inventory/ProductFormModal';
 import StockMovementModal from '@components/inventory/StockMovementModal';
 import StockHistoryModal from '@components/inventory/StockHistoryModal';
+import QuickSaleModal from '@components/inventory/QuickSaleModal';
+import ProductSpecifications from '@components/inventory/ProductSpecifications';
 
 const { Title, Text } = Typography;
 
@@ -54,8 +56,10 @@ const InventoryList: React.FC = () => {
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [movementModalOpen, setMovementModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [quickSaleModalOpen, setQuickSaleModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [movementProduct, setMovementProduct] = useState<Product | null>(null);
+  const [quickSaleProduct, setQuickSaleProduct] = useState<Product | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
 
   // Store y scanner
@@ -97,8 +101,9 @@ const InventoryList: React.FC = () => {
       
       if (existingProduct) {
         message.success(`Producto encontrado: ${existingProduct.name}`);
-        setEditingProduct(existingProduct);
-        setProductModalOpen(true);
+        // 🔥 CAMBIO: Abrir modal de venta rápida en lugar de edición
+        setQuickSaleProduct(existingProduct);
+        setQuickSaleModalOpen(true);
       } else {
         message.info(`Código ${barcode} no registrado. Crear nuevo producto.`);
         setEditingProduct(null);
@@ -280,11 +285,16 @@ const InventoryList: React.FC = () => {
     }
   };
 
+  const handleQuickSaleComplete = () => {
+    loadProducts();
+    loadLowStock();
+  };
+
   const handleScanClick = () => {
     setScannerEnabled(!scannerEnabled);
     if (!scannerEnabled) {
       message.success({
-        content: '🔍 Escáner activado. Escanee un código de barras...',
+        content: 'Escáner activado. Escanee un código de barras...',
         duration: 3,
       });
     } else {
@@ -312,18 +322,18 @@ const InventoryList: React.FC = () => {
 
   const getCategoryLabel = (category: string) => {
     const categories: Record<string, string> = {
-      repuestos: '🔩 Repuestos',
-      lubricantes: '🛢️ Lubricantes',
-      filtros: '🔍 Filtros',
-      frenos: '🛑 Frenos',
-      suspension: '⚙️ Suspensión',
-      electrico: '⚡ Eléctrico',
-      carroceria: '🚗 Carrocería',
-      neumaticos: '⚫ Neumáticos',
-      herramientas: '🔧 Herramientas',
-      accesorios: '✨ Accesorios',
-      consumibles: '📦 Consumibles',
-      otros: '📋 Otros',
+      repuestos: 'Repuestos',
+      lubricantes: 'Lubricantes',
+      filtros: 'Filtros',
+      frenos: 'Frenos',
+      suspension: 'Suspensión',
+      electrico: 'Eléctrico',
+      carroceria: 'Carrocería',
+      neumaticos: 'Neumáticos',
+      herramientas: 'Herramientas',
+      accesorios: 'Accesorios',
+      consumibles: 'Consumibles',
+      otros: 'Otros',
     };
     return categories[category] || category;
   };
@@ -345,14 +355,25 @@ const InventoryList: React.FC = () => {
     {
       title: 'Producto',
       key: 'product',
-      width: 250,
+      width: 350,
       render: (record: Product) => (
-        <Space direction="vertical" size={0}>
+        <Space direction="vertical" size={2} style={{ width: '100%' }}>
           <Text strong>{record.name}</Text>
           {record.description && (
             <Text type="secondary" style={{ fontSize: 12 }} ellipsis>
-              {record.description.substring(0, 50)}...
+              {record.description.substring(0, 60)}
+              {record.description.length > 60 ? '...' : ''}
             </Text>
+          )}
+          {/* 🔥 NUEVO: Mostrar especificaciones técnicas */}
+          {record.specifications && Object.keys(record.specifications).length > 0 && (
+            <div style={{ marginTop: 4 }}>
+              <ProductSpecifications
+                category={record.category}
+                specifications={record.specifications}
+                maxTags={4}
+              />
+            </div>
           )}
         </Space>
       ),
@@ -361,7 +382,7 @@ const InventoryList: React.FC = () => {
       title: 'Categoría',
       dataIndex: 'category',
       key: 'category',
-      width: 150,
+      width: 130,
       render: (category: string) => <Text>{getCategoryLabel(category)}</Text>,
     },
     {
@@ -473,7 +494,7 @@ const InventoryList: React.FC = () => {
                 danger={scannerEnabled}
                 className={scannerEnabled ? 'scanner-pulse' : ''}
               >
-                {scannerEnabled ? '🔴 Detener Escáner' : 'Escanear Código'}
+                {scannerEnabled ? 'Detener Escáner' : 'Escanear Código'}
               </Button>
             </Badge>
           </Tooltip>
@@ -486,7 +507,7 @@ const InventoryList: React.FC = () => {
       {/* Alertas de stock bajo */}
       {lowStockProducts.length > 0 && (
         <Alert
-          message={`⚠️ ${lowStockProducts.length} producto${
+          message={`${lowStockProducts.length} producto${
             lowStockProducts.length > 1 ? 's' : ''
           } con stock bajo`}
           description={
@@ -513,13 +534,10 @@ const InventoryList: React.FC = () => {
       {/* Escáner activo */}
       {scannerEnabled && (
         <Alert
-          message="🔍 Escáner Activo"
+          message="Escáner Activo"
           description={
             <Space direction="vertical" style={{ width: '100%' }}>
               <Text>El sistema está esperando que escanees un código de barras.</Text>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                💡 Tip: Escanea cualquier producto para agregarlo, editarlo o ver su información.
-              </Text>
             </Space>
           }
           type="success"
@@ -590,14 +608,14 @@ const InventoryList: React.FC = () => {
               size="large"
             >
               <Select.Option value="all">Todas las categorías</Select.Option>
-              <Select.Option value="repuestos">🔩 Repuestos</Select.Option>
-              <Select.Option value="lubricantes">🛢️ Lubricantes</Select.Option>
-              <Select.Option value="filtros">🔍 Filtros</Select.Option>
-              <Select.Option value="frenos">🛑 Frenos</Select.Option>
-              <Select.Option value="suspension">⚙️ Suspensión</Select.Option>
-              <Select.Option value="electrico">⚡ Eléctrico</Select.Option>
-              <Select.Option value="herramientas">🔧 Herramientas</Select.Option>
-              <Select.Option value="otros">📋 Otros</Select.Option>
+              <Select.Option value="repuestos">Repuestos</Select.Option>
+              <Select.Option value="lubricantes">Lubricantes</Select.Option>
+              <Select.Option value="filtros">Filtros</Select.Option>
+              <Select.Option value="frenos">Frenos</Select.Option>
+              <Select.Option value="suspension">Suspensión</Select.Option>
+              <Select.Option value="electrico">Eléctrico</Select.Option>
+              <Select.Option value="herramientas">Herramientas</Select.Option>
+              <Select.Option value="otros">Otros</Select.Option>
             </Select>
 
             <Select
@@ -631,7 +649,7 @@ const InventoryList: React.FC = () => {
           }}
           onChange={handleTableChange}
           size="middle"
-          scroll={{ x: 1200 }}
+          scroll={{ x: 1400 }}
         />
       </Card>
 
@@ -666,6 +684,17 @@ const InventoryList: React.FC = () => {
           setHistoryModalOpen(false);
           setMovementProduct(null);
         }}
+      />
+
+      {/* 🔥 NUEVO: Modal de venta rápida */}
+      <QuickSaleModal
+        open={quickSaleModalOpen}
+        scannedProduct={quickSaleProduct}
+        onClose={() => {
+          setQuickSaleModalOpen(false);
+          setQuickSaleProduct(null);
+        }}
+        onSaleComplete={handleQuickSaleComplete}
       />
 
       {/* CSS para animación */}
