@@ -154,8 +154,8 @@ const ClientFormModal: React.FC<ClientFormModalProps> = ({
           <Col span={12}>
             <Form.Item
               name="email"
-              label="Email (Opcional)"
-              rules={[{ validator: validateEmail }]}
+              label="Email"
+              rules={[{ required: true, message: 'Por favor ingrese el email' }, { validator: validateEmail }]}
             >
               <Input
                 placeholder="correo@ejemplo.com"

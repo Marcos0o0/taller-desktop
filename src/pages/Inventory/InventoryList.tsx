@@ -16,7 +16,6 @@ import {
   Tooltip,
   Popconfirm,
   Alert,
-  Collapse,
 } from 'antd';
 import {
   PlusOutlined,
@@ -28,13 +27,14 @@ import {
   WarningOutlined,
   DownloadOutlined,
   ReloadOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 import { inventoryApi, Product } from '@api/inventory.api';
 import { useInventoryStore } from '@store/inventoryStore';
 import { useBarcodeScanner } from '@hooks/useBarcodeScanner';
 import ProductFormModal from '@components/inventory/ProductFormModal';
 import StockMovementModal from '@components/inventory/StockMovementModal';
-import BarcodeTester from '@components/inventory/BarcodeTester';
+import StockHistoryModal from '@components/inventory/StockHistoryModal';
 
 const { Title, Text } = Typography;
 
@@ -53,12 +53,13 @@ const InventoryList: React.FC = () => {
   // Modales
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [movementModalOpen, setMovementModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [movementProduct, setMovementProduct] = useState<Product | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
 
   // Store y scanner
-  const { scannerEnabled, setScannerEnabled, setLastScannedCode } = useInventoryStore();
+  const { scannerEnabled, setScannerEnabled, lastScannedCode, setLastScannedCode } = useInventoryStore();
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [stats, setStats] = useState({
     total: 0,
@@ -80,6 +81,13 @@ const InventoryList: React.FC = () => {
     loadLowStock();
   }, [pagination.current, pagination.pageSize, searchText, categoryFilter, stockFilter]);
 
+  // Búsqueda automática al escanear
+  useEffect(() => {
+    if (scannerEnabled && lastScannedCode) {
+      handleQuickSearch(lastScannedCode);
+    }
+  }, [lastScannedCode]);
+
   async function handleBarcodeScanned(barcode: string) {
     try {
       setLastScannedCode(barcode);
@@ -88,11 +96,11 @@ const InventoryList: React.FC = () => {
       const existingProduct = await inventoryApi.getByBarcode(barcode);
       
       if (existingProduct) {
-        message.info(`Producto encontrado: ${existingProduct.name}`);
+        message.success(`Producto encontrado: ${existingProduct.name}`);
         setEditingProduct(existingProduct);
         setProductModalOpen(true);
       } else {
-        message.success(`Código escaneado: ${barcode}. Crear nuevo producto.`);
+        message.info(`Código ${barcode} no registrado. Crear nuevo producto.`);
         setEditingProduct(null);
         setProductModalOpen(true);
       }
@@ -100,6 +108,31 @@ const InventoryList: React.FC = () => {
       message.error('Error al buscar producto');
     }
   }
+
+  const handleQuickSearch = async (code: string) => {
+    try {
+      const product = await inventoryApi.getByBarcode(code);
+      if (product) {
+        // Resaltar el producto en la tabla
+        const productIndex = products.findIndex(p => p._id === product._id);
+        if (productIndex === -1) {
+          // Si no está en la página actual, mostrar info
+          message.info({
+            content: (
+              <Space direction="vertical">
+                <Text strong>Producto: {product.name}</Text>
+                <Text>Stock: {product.stock} unidades</Text>
+                <Text>Precio: ${product.price.toLocaleString('es-CL')}</Text>
+              </Space>
+            ),
+            duration: 5,
+          });
+        }
+      }
+    } catch (error) {
+      // Producto no encontrado, silenciosamente continuar
+    }
+  };
 
   const loadProducts = async () => {
     setLoading(true);
@@ -141,6 +174,29 @@ const InventoryList: React.FC = () => {
       setLowStockProducts(products);
     } catch (error) {
       console.error('Error loading low stock products');
+    }
+  };
+
+  const handleExport = async () => {
+    const hide = message.loading('Generando archivo Excel...', 0);
+    try {
+      const blob = await inventoryApi.exportInventory('excel');
+      
+      // Crear link de descarga
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `inventario-${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      hide();
+      message.success('Inventario exportado exitosamente');
+    } catch (error) {
+      hide();
+      message.error('Error al exportar inventario');
     }
   };
 
@@ -202,6 +258,11 @@ const InventoryList: React.FC = () => {
     setMovementModalOpen(true);
   };
 
+  const handleHistory = (product: Product) => {
+    setMovementProduct(product);
+    setHistoryModalOpen(true);
+  };
+
   const handleMovementModalOk = async (values: any) => {
     if (!movementProduct) return;
 
@@ -222,7 +283,10 @@ const InventoryList: React.FC = () => {
   const handleScanClick = () => {
     setScannerEnabled(!scannerEnabled);
     if (!scannerEnabled) {
-      message.info('Escáner activado. Escanee un código de barras...');
+      message.success({
+        content: '🔍 Escáner activado. Escanee un código de barras...',
+        duration: 3,
+      });
     } else {
       message.info('Escáner desactivado');
     }
@@ -270,6 +334,7 @@ const InventoryList: React.FC = () => {
       dataIndex: 'barcode',
       key: 'barcode',
       width: 130,
+      fixed: 'left' as const,
       render: (text: string) => (
         <Space>
           <BarcodeOutlined />
@@ -280,6 +345,7 @@ const InventoryList: React.FC = () => {
     {
       title: 'Producto',
       key: 'product',
+      width: 250,
       render: (record: Product) => (
         <Space direction="vertical" size={0}>
           <Text strong>{record.name}</Text>
@@ -327,9 +393,20 @@ const InventoryList: React.FC = () => {
     {
       title: 'Acciones',
       key: 'actions',
-      width: 200,
+      width: 280,
+      fixed: 'right' as const,
       render: (record: Product) => (
-        <Space size="small">
+        <Space size="small" wrap>
+          <Tooltip title="Ver Historial">
+            <Button
+              type="link"
+              icon={<HistoryOutlined />}
+              onClick={() => handleHistory(record)}
+              size="small"
+            >
+              Historial
+            </Button>
+          </Tooltip>
           <Tooltip title="Movimiento de Stock">
             <Button
               type="link"
@@ -372,20 +449,34 @@ const InventoryList: React.FC = () => {
           Inventario
         </Title>
         <Space>
+          <Button 
+            icon={<DownloadOutlined />} 
+            onClick={handleExport}
+            size="large"
+          >
+            Exportar Excel
+          </Button>
           <Button icon={<ReloadOutlined />} onClick={loadProducts} loading={loading}>
             Actualizar
           </Button>
-          <Badge dot={scanning} status="processing">
-            <Button
-              icon={<BarcodeOutlined />}
-              size="large"
-              onClick={handleScanClick}
-              type={scannerEnabled ? 'primary' : 'default'}
-              danger={scannerEnabled}
+          <Tooltip title={scannerEnabled ? "Escáner activo - Escanee un código" : "Activar escáner de código de barras"}>
+            <Badge 
+              dot={scanning} 
+              status="processing"
+              offset={[-5, 5]}
             >
-              {scannerEnabled ? 'Detener Escáner' : 'Escanear Código'}
-            </Button>
-          </Badge>
+              <Button
+                icon={<BarcodeOutlined />}
+                size="large"
+                onClick={handleScanClick}
+                type={scannerEnabled ? 'primary' : 'default'}
+                danger={scannerEnabled}
+                className={scannerEnabled ? 'scanner-pulse' : ''}
+              >
+                {scannerEnabled ? '🔴 Detener Escáner' : 'Escanear Código'}
+              </Button>
+            </Badge>
+          </Tooltip>
           <Button type="primary" icon={<PlusOutlined />} size="large" onClick={handleCreate}>
             Nuevo Producto
           </Button>
@@ -423,7 +514,14 @@ const InventoryList: React.FC = () => {
       {scannerEnabled && (
         <Alert
           message="🔍 Escáner Activo"
-          description="El sistema está esperando que escanees un código de barras. Escanea cualquier producto para agregarlo o editarlo."
+          description={
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Text>El sistema está esperando que escanees un código de barras.</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                💡 Tip: Escanea cualquier producto para agregarlo, editarlo o ver su información.
+              </Text>
+            </Space>
+          }
           type="success"
           showIcon
           closable
@@ -533,27 +631,15 @@ const InventoryList: React.FC = () => {
           }}
           onChange={handleTableChange}
           size="middle"
+          scroll={{ x: 1200 }}
         />
       </Card>
-
-      {/* Simulador para desarrollo */}
-      {import.meta.env.DEV && (
-        <Collapse
-          items={[
-            {
-              key: '1',
-              label: '🧪 Modo Desarrollo: Simulador de Escáner',
-              children: <BarcodeTester />,
-            },
-          ]}
-        />
-      )}
 
       {/* Modales */}
       <ProductFormModal
         open={productModalOpen}
         product={editingProduct}
-        scannedBarcode={scannerEnabled && !editingProduct ? undefined : undefined}
+        scannedBarcode={scannerEnabled && !editingProduct ? lastScannedCode || undefined : undefined}
         onOk={handleProductModalOk}
         onCancel={() => {
           setProductModalOpen(false);
@@ -572,6 +658,33 @@ const InventoryList: React.FC = () => {
         }}
         loading={modalLoading}
       />
+
+      <StockHistoryModal
+        open={historyModalOpen}
+        product={movementProduct}
+        onClose={() => {
+          setHistoryModalOpen(false);
+          setMovementProduct(null);
+        }}
+      />
+
+      {/* CSS para animación */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { 
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.7);
+          }
+          50% { 
+            transform: scale(1.05);
+            box-shadow: 0 0 0 10px rgba(255, 77, 79, 0);
+          }
+        }
+        
+        .scanner-pulse {
+          animation: pulse 2s infinite;
+        }
+      `}</style>
     </Space>
   );
 };
