@@ -7,6 +7,7 @@ import Dashboard from '@pages/Dashboard/Dashboard';
 import ClientsList from '@pages/Clients/ClientsList';
 import ClientDetail from '@pages/Clients/ClientDetail';
 import QuotesList from '@pages/Quotes/QuotesList';
+import NewQuote from '@pages/Quotes/NewQuote';
 import QuoteDetail from '@pages/Quotes/QuoteDetail';
 import OrdersList from '@pages/Orders/OrdersList';
 import OrderDetail from '@pages/Orders/OrderDetail';
@@ -47,6 +48,7 @@ const AppRouter: React.FC = () => {
                   
                   {/* Presupuestos */}
                   <Route path="/presupuestos" element={<QuotesList />} />
+                  <Route path="/presupuestos/nuevo" element={<NewQuote />} />
                   <Route path="/presupuestos/:id" element={<QuoteDetail />} />
                   
                   {/* Órdenes */}

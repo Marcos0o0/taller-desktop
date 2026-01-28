@@ -28,11 +28,15 @@ let win: BrowserWindow | null
 
 function createWindow() {
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    title: 'Sistema de Taller Mecánico',
+    icon: path.join(process.env.VITE_PUBLIC, 'car.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
+
+  win.maximize()
+
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
