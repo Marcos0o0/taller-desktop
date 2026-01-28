@@ -40,21 +40,21 @@ export const useBarcodeScanner = ({
       // Si es Enter, procesar el código escaneado
       if (event.key === 'Enter') {
         event.preventDefault();
-        
+
         const barcode = barcodeBuffer.current.trim();
-        
+
         if (barcode.length >= minLength && barcode.length <= maxLength) {
           onScan(barcode);
         }
-        
+
         barcodeBuffer.current = '';
         setScanning(false);
-        
+
         if (timeoutId.current) {
           clearTimeout(timeoutId.current);
           timeoutId.current = null;
         }
-        
+
         return;
       }
 

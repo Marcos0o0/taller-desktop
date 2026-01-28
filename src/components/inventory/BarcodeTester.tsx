@@ -45,6 +45,8 @@ const BarcodeTester: React.FC = () => {
     { label: 'UPC-A Ejemplo', code: '012345678905' },
     { label: 'Code 128 Ejemplo', code: 'ABC123XYZ' },
     { label: 'Código Corto', code: '12345' },
+    { label: 'Filtro Aceite', code: 'FLT001' },
+    { label: 'Pastillas Freno', code: 'BRK001' },
   ];
 
   return (
@@ -61,8 +63,8 @@ const BarcodeTester: React.FC = () => {
         <div>
           <Title level={5}>Modo de Prueba</Title>
           <Paragraph type="secondary">
-            Este componente simula un lector de código de barras USB para pruebas.
-            Ingresa un código y presiona "Simular Escaneo" para probarlo.
+            Este componente simula un lector de código de barras USB para pruebas. Ingresa un
+            código y presiona "Simular Escaneo" para probarlo.
           </Paragraph>
         </div>
 
@@ -106,8 +108,14 @@ const BarcodeTester: React.FC = () => {
 
         <Divider />
 
-        <div style={{ backgroundColor: '#f0f0f0', padding: '12px', borderRadius: '4px' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
+        <div
+          style={{
+            backgroundColor: '#f0f0f0',
+            padding: '12px',
+            borderRadius: '4px',
+          }}
+        >
+          <Text type="secondary" style={{ fontSize: 12 }}>
             💡 <strong>Consejo:</strong> Primero activa el escáner en la página de Inventario
             haciendo clic en "Escanear Código", luego usa este simulador para probar la
             funcionalidad sin necesidad de un lector físico.
