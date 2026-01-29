@@ -11,6 +11,7 @@ import {
   MenuUnfoldOutlined,
   LogoutOutlined,
   SettingOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@store/authStore';
@@ -45,6 +46,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       key: '/presupuestos',
       icon: <FileTextOutlined />,
       label: 'Presupuestos',
+    },
+    {
+      key: '/trabajos-rapidos',
+      icon: <ThunderboltOutlined />,
+      label: 'Trabajos Rápidos',
+      style: { background: '#1890ff15' }, // Destacar visualmente
     },
     {
       key: '/ordenes',
@@ -105,7 +112,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <Space>
               <ToolOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
               <Text strong style={{ fontSize: 18 }}>
-                Taller Mecánico
+                Automotriz Portezuelo
               </Text>
             </Space>
           ) : (

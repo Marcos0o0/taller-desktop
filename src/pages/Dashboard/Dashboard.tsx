@@ -1,507 +1,448 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
+  Card,
   Row,
   Col,
-  Card,
   Statistic,
   Typography,
   Space,
-  Button,
   Table,
   Tag,
   Progress,
-  Empty,
-  Spin,
-  message,
+  List,
+  Avatar,
+  Divider,
+  Select,
+  DatePicker,
 } from 'antd';
 import {
-  UserOutlined,
-  FileTextOutlined,
-  ToolOutlined,
   DollarOutlined,
-  ReloadOutlined,
+  FileTextOutlined,
+  ShoppingCartOutlined,
+  UserOutlined,
   RiseOutlined,
   FallOutlined,
+  ThunderboltOutlined,
+  ToolOutlined,
+  WarningOutlined,
+  TrophyOutlined,
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
-import { dashboardApi } from '@api/dashboard.api';
-import { ordersApi } from '@api/orders.api';
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 import dayjs from 'dayjs';
+import isoWeek from 'dayjs/plugin/isoWeek';
+
+dayjs.extend(isoWeek);
 
 const { Title, Text } = Typography;
+const { RangePicker } = DatePicker;
 
-interface DashboardData {
-  clients: {
-    total: number;
-    newThisMonth: number;
-  };
-  quotes: {
-    pending: number;
-    approved: number;
-    rejected: number;
-    total: number;
-  };
-  orders: {
-    pendiente_asignacion: number;
-    asignada: number;
-    en_progreso: number;
-    listo: number;
-    entregado: number;
-    total: number;
-  };
-  revenue: {
-    total: number;
-    completedOrders: number;
-    averageOrderValue: number;
-  };
-  recentActivity: {
-    ordersLast30Days: number;
-  };
-}
+// Colores para gráficos
+const COLORS = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2'];
 
-interface RecentOrder {
-  _id: string;
-  quoteNumber: string;
-  client: any;
-  vehicle: any;
-  order: any;
-}
-
-const Dashboard: React.FC = () => {
-  const navigate = useNavigate();
-  const [stats, setStats] = useState<DashboardData | null>(null);
-  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+const DashboardPage: React.FC = () => {
+  const [dateRange, setDateRange] = useState<'week' | 'month' | 'year'>('month');
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [ordersLoading, setOrdersLoading] = useState(true);
 
   useEffect(() => {
-    loadAllData();
-  }, []);
+    loadDashboardData();
+  }, [dateRange]);
 
-  const loadAllData = async () => {
-    await Promise.all([
-      loadStats(),
-      loadRecentOrders()
-    ]);
-  };
-
-  const loadStats = async () => {
+  const loadDashboardData = () => {
     setLoading(true);
-    try {
-      const data = await dashboardApi.getStats();
-      setStats(data);
-    } catch (error) {
-      console.error('Error loading stats:', error);
-      message.error('Error al cargar estadísticas');
-    } finally {
-      setLoading(false);
+    
+    // Cargar datos de trabajos rápidos
+    const quickJobsStr = localStorage.getItem('quickJobs');
+    const quickJobs = quickJobsStr ? JSON.parse(quickJobsStr) : [];
+
+    // Calcular fecha de inicio según el rango
+    let startDate = dayjs();
+    if (dateRange === 'week') {
+      startDate = dayjs().subtract(7, 'days');
+    } else if (dateRange === 'month') {
+      startDate = dayjs().subtract(30, 'days');
+    } else {
+      startDate = dayjs().subtract(365, 'days');
     }
-  };
 
-  const loadRecentOrders = async () => {
-    setOrdersLoading(true);
-    try {
-      const response = await ordersApi.list({
-        limit: 5,
-        sort: '-createdAt' // Ordenar por más recientes
-      });
-      setRecentOrders(response.orders);
-    } catch (error) {
-      console.error('Error loading recent orders:', error);
-    } finally {
-      setOrdersLoading(false);
-    }
-  };
+    // Filtrar trabajos en el rango
+    const filteredJobs = quickJobs.filter((job: any) => {
+      return dayjs(job.createdAt).isAfter(startDate);
+    });
 
-  const getStatusTag = (status: string) => {
-    const statusMap: Record<string, { color: string; text: string }> = {
-      pendiente_asignacion: { color: 'default', text: 'Pendiente' },
-      asignada: { color: 'orange', text: 'Asignada' },
-      en_progreso: { color: 'blue', text: 'En Progreso' },
-      listo: { color: 'green', text: 'Listo' },
-      entregado: { color: 'default', text: 'Entregado' },
-    };
-    const { color, text } = statusMap[status] || statusMap.pendiente_asignacion;
-    return <Tag color={color}>{text}</Tag>;
-  };
+    // Calcular estadísticas
+    const totalRevenue = filteredJobs.reduce((sum: number, job: any) => sum + job.totalCost, 0);
+    const totalLabor = filteredJobs.reduce((sum: number, job: any) => sum + job.laborCost, 0);
+    const totalParts = filteredJobs.reduce((sum: number, job: any) => sum + job.partsCost, 0);
+    const totalJobs = filteredJobs.length;
+    const avgJobValue = totalJobs > 0 ? Math.round(totalRevenue / totalJobs) : 0;
 
-  const handleViewOrder = (orderId: string) => {
-    navigate(`/ordenes/${orderId}`);
-  };
-
-  const columns = [
-    {
-      title: 'N° Orden',
-      dataIndex: ['order', 'orderNumber'],
-      key: 'orderNumber',
-      render: (orderNumber: string, record: RecentOrder) => (
-        <Text 
-          strong 
-          style={{ cursor: 'pointer', color: '#1890ff' }}
-          onClick={() => handleViewOrder(record._id)}
-        >
-          {orderNumber || record.quoteNumber}
-        </Text>
-      ),
-    },
-    {
-      title: 'Cliente',
-      key: 'client',
-      render: (record: RecentOrder) => {
-        const client = typeof record.client === 'object' ? record.client : null;
-        return client
-          ? `${client.firstName} ${client.lastName1}${client.lastName2 ? ' ' + client.lastName2 : ''}`
-          : 'N/A';
-      },
-    },
-    {
-      title: 'Vehículo',
-      key: 'vehicle',
-      render: (record: RecentOrder) =>
-        record.vehicle
-          ? `${record.vehicle.brand} ${record.vehicle.model} ${record.vehicle.year}`
-          : 'N/A',
-    },
-    {
-      title: 'Estado',
-      dataIndex: ['order', 'status'],
-      key: 'status',
-      render: (status: string) => status ? getStatusTag(status) : <Tag>N/A</Tag>,
-    },
-    {
-      title: 'Monto',
-      key: 'amount',
-      render: (record: RecentOrder) => {
-        const amount = record.order?.finalCost || record.order?.estimatedCost || 0;
-        return <Text strong>${amount.toLocaleString('es-CL')}</Text>;
-      },
-    },
-  ];
-
-  // Calcular porcentajes reales
-  const calculatePercentage = (current: number, previous: number) => {
-    if (previous === 0) return current > 0 ? 100 : 0;
-    return ((current - previous) / previous) * 100;
-  };
-
-  // Calcular clientes del mes anterior (simulado basado en datos reales)
-  const calculatePreviousMonthClients = (total: number, newThisMonth: number) => {
-    return Math.max(0, total - newThisMonth);
-  };
-
-  if (loading) {
-    return (
-      <div style={{ textAlign: 'center', padding: '100px 0' }}>
-        <Spin size="large" />
-        <div style={{ marginTop: 16 }}>
-          <Text type="secondary">Cargando dashboard...</Text>
-        </div>
-      </div>
+    // Comparación con periodo anterior
+    const prevStartDate = startDate.subtract(
+      dateRange === 'week' ? 7 : dateRange === 'month' ? 30 : 365,
+      'days'
     );
+    const prevJobs = quickJobs.filter((job: any) => {
+      const date = dayjs(job.createdAt);
+      return date.isAfter(prevStartDate) && date.isBefore(startDate);
+    });
+    const prevRevenue = prevJobs.reduce((sum: number, job: any) => sum + job.totalCost, 0);
+    const revenueChange = prevRevenue > 0 ? ((totalRevenue - prevRevenue) / prevRevenue) * 100 : 0;
+
+    // Top servicios
+    const serviceCount: any = {};
+    filteredJobs.forEach((job: any) => {
+      serviceCount[job.jobName] = (serviceCount[job.jobName] || 0) + 1;
+    });
+    const topServices = Object.entries(serviceCount)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a: any, b: any) => b.count - a.count)
+      .slice(0, 5);
+
+    // Ingresos por servicio
+    const revenueByService: any = {};
+    filteredJobs.forEach((job: any) => {
+      revenueByService[job.jobName] = (revenueByService[job.jobName] || 0) + job.totalCost;
+    });
+    const topRevenueServices = Object.entries(revenueByService)
+      .map(([name, revenue]) => ({ name, revenue }))
+      .sort((a: any, b: any) => b.revenue - a.revenue)
+      .slice(0, 5);
+
+    // Gráfico de ingresos diarios
+    const dailyRevenue: any = {};
+    filteredJobs.forEach((job: any) => {
+      const date = dayjs(job.createdAt).format('YYYY-MM-DD');
+      if (!dailyRevenue[date]) {
+        dailyRevenue[date] = { date, revenue: 0, jobs: 0 };
+      }
+      dailyRevenue[date].revenue += job.totalCost;
+      dailyRevenue[date].jobs += 1;
+    });
+
+    const revenueChartData = Object.values(dailyRevenue)
+      .sort((a: any, b: any) => a.date.localeCompare(b.date))
+      .map((item: any) => ({
+        date: dayjs(item.date).format('DD/MM'),
+        revenue: item.revenue,
+        jobs: item.jobs,
+      }));
+
+    // Distribución de ingresos (mano de obra vs repuestos)
+    const revenueDistribution = [
+      { name: 'Mano de Obra', value: totalLabor },
+      { name: 'Repuestos', value: totalParts },
+    ];
+
+    // Últimos trabajos
+    const recentJobs = filteredJobs
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+
+    setStats({
+      totalRevenue,
+      totalLabor,
+      totalParts,
+      totalJobs,
+      avgJobValue,
+      revenueChange,
+      topServices,
+      topRevenueServices,
+      revenueChartData,
+      revenueDistribution,
+      recentJobs,
+    });
+
+    setLoading(false);
+  };
+
+  // Cargar inventario con stock bajo
+  const getLowStockProducts = () => {
+    const inventoryStr = localStorage.getItem('inventory');
+    if (!inventoryStr) return [];
+    
+    const inventory = JSON.parse(inventoryStr);
+    return inventory
+      .filter((p: any) => p.stock <= (p.minStock || 5))
+      .sort((a: any, b: any) => a.stock - b.stock)
+      .slice(0, 5);
+  };
+
+  const lowStockProducts = getLowStockProducts();
+
+  if (loading || !stats) {
+    return <div>Cargando...</div>;
   }
-
-  if (!stats) {
-    return (
-      <div style={{ textAlign: 'center', padding: '100px 0' }}>
-        <Empty description="No se pudieron cargar las estadísticas" />
-        <Button type="primary" onClick={loadAllData} style={{ marginTop: 16 }}>
-          Reintentar
-        </Button>
-      </div>
-    );
-  }
-
-  // Calcular estadísticas derivadas
-  const activeOrders = stats.orders.asignada + stats.orders.en_progreso + stats.orders.listo;
-  const totalActiveOrders = stats.orders.total - stats.orders.entregado;
-  
-  // Calcular porcentaje de clientes nuevos
-  const previousMonthClients = calculatePreviousMonthClients(stats.clients.total, stats.clients.newThisMonth);
-  const clientsGrowthPercentage = calculatePercentage(stats.clients.newThisMonth, previousMonthClients);
-
-  // Calcular porcentaje de crecimiento de ingresos (estimado)
-  const revenueGrowthPercentage = stats.recentActivity.ordersLast30Days > 0 ? 15 : 0;
-
-  // Calcular porcentaje de órdenes por estado
-  const totalOrders = activeOrders || 1; // Evitar división por 0
-  const asignadasPercent = Math.round((stats.orders.asignada / totalOrders) * 100);
-  const enProgresoPercent = Math.round((stats.orders.en_progreso / totalOrders) * 100);
-  const listoPercent = Math.round((stats.orders.listo / totalOrders) * 100);
 
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={2} style={{ margin: 0 }}>
-          Dashboard
-        </Title>
-        <Button icon={<ReloadOutlined />} onClick={loadAllData} loading={loading}>
-          Actualizar
-        </Button>
-      </div>
-
-      {/* Estadísticas principales */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Total Clientes"
-              value={stats.clients.total}
-              prefix={<UserOutlined />}
-              valueStyle={{ color: '#3f8600' }}
-            />
-            <Progress
-              percent={stats.clients.total > 0 ? 100 : 0}
-              showInfo={false}
-              strokeColor="#3f8600"
-              style={{ marginTop: 8 }}
-            />
-            <Space style={{ marginTop: 8 }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {stats.clients.newThisMonth > 0 ? (
-                  <>
-                    <RiseOutlined style={{ color: '#52c41a' }} /> +{clientsGrowthPercentage.toFixed(0)}% este mes
-                  </>
-                ) : (
-                  <>Sin cambios</>
-                )}
-              </Text>
-            </Space>
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Presupuestos Pendientes"
-              value={stats.quotes.pending}
-              prefix={<FileTextOutlined />}
-              valueStyle={{ color: '#faad14' }}
-            />
-            <Progress
-              percent={stats.quotes.total > 0 ? (stats.quotes.pending / stats.quotes.total) * 100 : 0}
-              showInfo={false}
-              strokeColor="#faad14"
-              style={{ marginTop: 8 }}
-            />
-            <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
-              Pendientes de aprobación
-            </Text>
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Órdenes Activas"
-              value={activeOrders}
-              prefix={<ToolOutlined />}
-              valueStyle={{ color: '#1890ff' }}
-            />
-            <Progress
-              percent={totalActiveOrders > 0 ? (activeOrders / totalActiveOrders) * 100 : 0}
-              showInfo={false}
-              strokeColor="#1890ff"
-              style={{ marginTop: 8 }}
-            />
-            <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
-              {stats.orders.en_progreso} en progreso
-            </Text>
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Ingresos del Mes"
-              value={stats.revenue.total}
-              prefix={<DollarOutlined />}
-              precision={0}
-              valueStyle={{ color: '#cf1322' }}
-              suffix="CLP"
-            />
-            <Progress
-              percent={stats.revenue.total > 0 ? 80 : 0}
-              showInfo={false}
-              strokeColor="#cf1322"
-              style={{ marginTop: 8 }}
-            />
-            <Space style={{ fontSize: 12, marginTop: 8 }}>
-              <Text type="secondary">vs mes anterior</Text>
-              {revenueGrowthPercentage > 0 ? (
-                <Text type="success">
-                  <RiseOutlined /> {revenueGrowthPercentage}%
-                </Text>
-              ) : (
-                <Text type="secondary">Sin cambios</Text>
-              )}
-            </Space>
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Distribución de órdenes y rendimiento */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <Card title="Estado de Órdenes" extra={<Text type="secondary">Hoy</Text>}>
-            <Space direction="vertical" style={{ width: '100%' }} size="middle">
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <Text>Asignadas</Text>
-                  <Text strong>{stats.orders.asignada}</Text>
-                </div>
-                <Progress
-                  percent={asignadasPercent}
-                  strokeColor="#ffa940"
-                  showInfo={false}
-                />
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <Text>En Progreso</Text>
-                  <Text strong>{stats.orders.en_progreso}</Text>
-                </div>
-                <Progress
-                  percent={enProgresoPercent}
-                  strokeColor="#1890ff"
-                  showInfo={false}
-                />
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <Text>Listo para Entrega</Text>
-                  <Text strong>{stats.orders.listo}</Text>
-                </div>
-                <Progress
-                  percent={listoPercent}
-                  strokeColor="#52c41a"
-                  showInfo={false}
-                />
-              </div>
-
-              {activeOrders === 0 && (
-                <Empty 
-                  description="No hay órdenes activas"
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  style={{ marginTop: 16 }}
-                />
-              )}
-            </Space>
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={12}>
-          <Card title="Rendimiento" extra={<Text type="secondary">Último mes</Text>}>
-            <Space direction="vertical" style={{ width: '100%' }} size="large">
-              <div>
-                <Text type="secondary">Tasa de conversión (Presupuesto → Orden)</Text>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8 }}>
-                  <Progress
-                    type="circle"
-                    percent={stats.quotes.total > 0 ? Math.round((stats.quotes.approved / stats.quotes.total) * 100) : 0}
-                    width={80}
-                    strokeColor="#52c41a"
-                  />
-                  <Space direction="vertical" size={0}>
-                    <Text strong style={{ fontSize: 18 }}>
-                      {stats.quotes.total > 0 ? Math.round((stats.quotes.approved / stats.quotes.total) * 100) : 0}%
-                    </Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      {stats.quotes.approved} de {stats.quotes.total} aprobados
-                    </Text>
-                  </Space>
-                </div>
-              </div>
-
-              <div>
-                <Text type="secondary">Tiempo promedio de reparación</Text>
-                <div style={{ marginTop: 8 }}>
-                  <Text strong style={{ fontSize: 24 }}>
-                    2.5 días
-                  </Text>
-                  <Text type="success" style={{ fontSize: 12, marginLeft: 8 }}>
-                    <FallOutlined /> -0.3 días
-                  </Text>
-                </div>
-              </div>
-
-              <div>
-                <Text type="secondary">Órdenes completadas este mes</Text>
-                <div style={{ marginTop: 8 }}>
-                  <Text strong style={{ fontSize: 24 }}>
-                    {stats.orders.entregado}
-                  </Text>
-                </div>
-              </div>
-            </Space>
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Órdenes recientes */}
-      <Card 
-        title="Órdenes Recientes" 
-        extra={
-          recentOrders.length > 0 ? (
-            <Button type="link" onClick={() => navigate('/ordenes')}>
-              Ver todas →
-            </Button>
-          ) : null
-        }
-      >
-        {ordersLoading ? (
-          <div style={{ textAlign: 'center', padding: '40px 0' }}>
-            <Spin />
-          </div>
-        ) : recentOrders.length === 0 ? (
-          <Empty 
-            description="No hay órdenes recientes"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
+    <div style={{ padding: '24px' }}>
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Title level={2}>Panel de Control</Title>
+          <Select
+            value={dateRange}
+            onChange={setDateRange}
+            style={{ width: 150 }}
+            size="large"
           >
-            <Button type="primary" onClick={() => navigate('/presupuestos/nuevo')}>
-              Crear Primer Presupuesto
-            </Button>
-          </Empty>
-        ) : (
-          <Table
-            columns={columns}
-            dataSource={recentOrders}
-            rowKey="_id"
-            pagination={false}
-            size="middle"
-          />
-        )}
-      </Card>
+            <Select.Option value="week">Última semana</Select.Option>
+            <Select.Option value="month">Último mes</Select.Option>
+            <Select.Option value="year">Último año</Select.Option>
+          </Select>
+        </div>
 
-      {/* Información adicional */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12}>
-          <Card>
-            <Statistic
-              title="Clientes Nuevos Este Mes"
-              value={stats.clients.newThisMonth}
-              prefix={<UserOutlined />}
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12}>
-          <Card>
-            <Statistic
-              title="Valor Promedio por Orden"
-              value={stats.revenue.averageOrderValue}
-              prefix="$"
-              precision={0}
-              valueStyle={{ color: '#52c41a' }}
-              suffix="CLP"
-            />
-          </Card>
-        </Col>
-      </Row>
-    </Space>
+        {/* Tarjetas de estadísticas principales */}
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Ingresos Totales"
+                value={stats.totalRevenue}
+                prefix={<DollarOutlined />}
+                suffix="CLP"
+                valueStyle={{ color: '#1890ff' }}
+                formatter={(value) => `$${value.toLocaleString('es-CL')}`}
+              />
+              <div style={{ marginTop: 8 }}>
+                {stats.revenueChange >= 0 ? (
+                  <Text type="success">
+                    <RiseOutlined /> +{stats.revenueChange.toFixed(1)}% vs periodo anterior
+                  </Text>
+                ) : (
+                  <Text type="danger">
+                    <FallOutlined /> {stats.revenueChange.toFixed(1)}% vs periodo anterior
+                  </Text>
+                )}
+              </div>
+            </Card>
+          </Col>
+
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Trabajos Realizados"
+                value={stats.totalJobs}
+                prefix={<ThunderboltOutlined />}
+                valueStyle={{ color: '#52c41a' }}
+              />
+              <div style={{ marginTop: 8 }}>
+                <Text type="secondary">
+                  Promedio: ${stats.avgJobValue.toLocaleString('es-CL')} por trabajo
+                </Text>
+              </div>
+            </Card>
+          </Col>
+
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Mano de Obra"
+                value={stats.totalLabor}
+                prefix={<ToolOutlined />}
+                suffix="CLP"
+                valueStyle={{ color: '#722ed1' }}
+                formatter={(value) => `$${value.toLocaleString('es-CL')}`}
+              />
+              <div style={{ marginTop: 8 }}>
+                <Text type="secondary">
+                  {stats.totalRevenue > 0 ? ((stats.totalLabor / stats.totalRevenue) * 100).toFixed(1) : 0}% del total
+                </Text>
+              </div>
+            </Card>
+          </Col>
+
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Repuestos"
+                value={stats.totalParts}
+                prefix={<ShoppingCartOutlined />}
+                suffix="CLP"
+                valueStyle={{ color: '#faad14' }}
+                formatter={(value) => `$${value.toLocaleString('es-CL')}`}
+              />
+              <div style={{ marginTop: 8 }}>
+                <Text type="secondary">
+                  {stats.totalRevenue > 0 ? ((stats.totalParts / stats.totalRevenue) * 100).toFixed(1) : 0}% del total
+                </Text>
+              </div>
+            </Card>
+          </Col>
+        </Row>
+
+        {/* Gráficos */}
+        <Row gutter={[16, 16]}>
+          {/* Gráfico de ingresos */}
+          <Col xs={24} lg={16}>
+            <Card title="Ingresos Diarios">
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={stats.revenueChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip
+                    formatter={(value: any) => `$${value.toLocaleString('es-CL')}`}
+                    labelFormatter={(label) => `Fecha: ${label}`}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#1890ff"
+                    strokeWidth={2}
+                    name="Ingresos"
+                    dot={{ r: 4 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </Card>
+          </Col>
+
+          {/* Distribución de ingresos */}
+          <Col xs={24} lg={8}>
+            <Card title="Distribución de Ingresos">
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={stats.revenueDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={(entry) => `${entry.name}: $${(entry.value / 1000).toFixed(0)}k`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {stats.revenueDistribution.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: any) => `$${value.toLocaleString('es-CL')}`} />
+                </PieChart>
+              </ResponsiveContainer>
+            </Card>
+          </Col>
+        </Row>
+
+        {/* Top servicios */}
+        <Row gutter={[16, 16]}>
+          <Col xs={24} lg={12}>
+            <Card title={<><TrophyOutlined /> Servicios Más Populares</>}>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={stats.topServices} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={150} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#52c41a" name="Cantidad" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          </Col>
+
+          <Col xs={24} lg={12}>
+            <Card title={<><DollarOutlined /> Servicios Más Rentables</>}>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={stats.topRevenueServices} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={150} />
+                  <Tooltip formatter={(value: any) => `$${value.toLocaleString('es-CL')}`} />
+                  <Bar dataKey="revenue" fill="#1890ff" name="Ingresos" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          </Col>
+        </Row>
+
+        {/* Trabajos recientes y alertas */}
+        <Row gutter={[16, 16]}>
+          <Col xs={24} lg={12}>
+            <Card title="⚡ Últimos Trabajos Realizados">
+              <List
+                itemLayout="horizontal"
+                dataSource={stats.recentJobs}
+                renderItem={(item: any) => (
+                  <List.Item>
+                    <List.Item.Meta
+                      avatar={<Avatar style={{ backgroundColor: '#1890ff' }}>{item.jobName[0]}</Avatar>}
+                      title={item.jobName}
+                      description={
+                        <Space direction="vertical" size={0}>
+                          <Text type="secondary">{dayjs(item.createdAt).format('DD/MM/YYYY HH:mm')}</Text>
+                          <Text type="secondary">{item.vehicleInfo}</Text>
+                        </Space>
+                      }
+                    />
+                    <Text strong style={{ fontSize: 16 }}>
+                      ${item.totalCost.toLocaleString('es-CL')}
+                    </Text>
+                  </List.Item>
+                )}
+              />
+            </Card>
+          </Col>
+
+          <Col xs={24} lg={12}>
+            <Card
+              title={
+                <Space>
+                  <WarningOutlined style={{ color: '#faad14' }} />
+                  <span>Alertas de Inventario</span>
+                </Space>
+              }
+            >
+              {lowStockProducts.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                  <Text type="secondary">Todo el inventario tiene stock suficiente</Text>
+                </div>
+              ) : (
+                <List
+                  itemLayout="horizontal"
+                  dataSource={lowStockProducts}
+                  renderItem={(item: any) => (
+                    <List.Item>
+                      <List.Item.Meta
+                        avatar={<Avatar icon={<WarningOutlined />} style={{ backgroundColor: '#faad14' }} />}
+                        title={item.name}
+                        description={
+                          <Space>
+                            <Tag color="red">Stock: {item.stock}</Tag>
+                            <Text type="secondary">Mínimo: {item.minStock || 5}</Text>
+                          </Space>
+                        }
+                      />
+                      <Progress
+                        type="circle"
+                        percent={Math.round((item.stock / (item.minStock || 5)) * 100)}
+                        width={50}
+                        status={item.stock === 0 ? 'exception' : 'normal'}
+                      />
+                    </List.Item>
+                  )}
+                />
+              )}
+            </Card>
+          </Col>
+        </Row>
+      </Space>
+    </div>
   );
 };
 
-export default Dashboard;
+export default DashboardPage;

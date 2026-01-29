@@ -3,7 +3,7 @@ import { Typography, Button, Space, message } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { quotesApi } from '@api/quotes.api';
-import QuoteForm from '@components/quotes/QuoteForm';
+import QuoteForm from '@/components/quotes/QuoteFormUX';
 
 const { Title } = Typography;
 

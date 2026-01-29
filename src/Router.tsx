@@ -13,6 +13,8 @@ import OrdersList from '@pages/Orders/OrdersList';
 import OrderDetail from '@pages/Orders/OrderDetail';
 import InventoryList from '@pages/Inventory/InventoryList';
 import FuseDiagramsViewer from '@pages/FuseDiagrams/FuseDiagramsViewer';
+import QuickJobsPage from '@pages/QuickJobs/QuickJobsPage';
+import QuickJobsHistory from '@pages/QuickJobs/QuickJobsHistory';
 
 // Componente para proteger rutas
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -50,6 +52,10 @@ const AppRouter: React.FC = () => {
                   <Route path="/presupuestos" element={<QuotesList />} />
                   <Route path="/presupuestos/nuevo" element={<NewQuote />} />
                   <Route path="/presupuestos/:id" element={<QuoteDetail />} />
+                  
+                  {/* Trabajos Rápidos - NUEVO */}
+                  <Route path="/trabajos-rapidos" element={<QuickJobsPage />} />
+                  <Route path="/trabajos-rapidos/historial" element={<QuickJobsHistory />} />
                   
                   {/* Órdenes */}
                   <Route path="/ordenes" element={<OrdersList />} />
