@@ -22,10 +22,12 @@ import {
   ToolOutlined,
   FilePdfOutlined,
   PrinterOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { quotesApi } from '@api/quotes.api';
 import { Quote } from '@types/api.types';
+import { downloadQuotePDF, printQuotePDF } from '@utils/quotePdfGenerator';
 
 const { Title, Text } = Typography;
 
@@ -34,6 +36,42 @@ const QuoteDetail: React.FC = () => {
   const navigate = useNavigate();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  // 🔧 Función helper para parsear proposedWork (maneja JSON y texto plano)
+  const parseProposedWork = (proposedWork: string) => {
+    if (!proposedWork) {
+      return {
+        isJSON: false,
+        text: 'No hay información de trabajo propuesto',
+        services: [],
+        parts: [],
+        externalParts: [],
+      };
+    }
+
+    try {
+      // Intentar parsear como JSON (formato antiguo)
+      const parsed = JSON.parse(proposedWork);
+      return {
+        isJSON: true,
+        text: proposedWork,
+        services: parsed.services || [],
+        parts: parsed.parts || [],
+        externalParts: parsed.externalParts || [],
+      };
+    } catch (error) {
+      // Es texto plano (formato nuevo)
+      console.log('proposedWork es texto plano (nuevo formato)');
+      return {
+        isJSON: false,
+        text: proposedWork,
+        services: [],
+        parts: [],
+        externalParts: [],
+      };
+    }
+  };
 
   useEffect(() => {
     if (id) {
@@ -89,6 +127,68 @@ const QuoteDetail: React.FC = () => {
     }
   };
 
+  const handleDownloadPDF = () => {
+    if (!quote) return;
+
+    setPdfLoading(true);
+    try {
+      const client = typeof quote.clientId === 'object' ? quote.clientId : null;
+      
+      if (!client) {
+        message.error('No se puede generar PDF sin datos del cliente');
+        return;
+      }
+
+      // Parsear servicios y repuestos usando la nueva función
+      const proposedWorkData = parseProposedWork(quote.proposedWork);
+
+      downloadQuotePDF({
+        quote,
+        client,
+        services: proposedWorkData.services,
+        parts: [...proposedWorkData.parts, ...proposedWorkData.externalParts],
+      });
+
+      message.success('PDF descargado exitosamente');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      message.error('Error al generar PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handlePrintPDF = () => {
+    if (!quote) return;
+
+    setPdfLoading(true);
+    try {
+      const client = typeof quote.clientId === 'object' ? quote.clientId : null;
+      
+      if (!client) {
+        message.error('No se puede imprimir sin datos del cliente');
+        return;
+      }
+
+      // Parsear servicios y repuestos usando la nueva función
+      const proposedWorkData = parseProposedWork(quote.proposedWork);
+
+      printQuotePDF({
+        quote,
+        client,
+        services: proposedWorkData.services,
+        parts: [...proposedWorkData.parts, ...proposedWorkData.externalParts],
+      });
+
+      message.success('Abriendo vista de impresión...');
+    } catch (error) {
+      console.error('Error printing PDF:', error);
+      message.error('Error al imprimir');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const getStatusTag = (status: string) => {
     const statusMap = {
       pending: { color: 'orange', text: 'Pendiente', icon: <MailOutlined /> },
@@ -117,20 +217,16 @@ const QuoteDetail: React.FC = () => {
 
   const client = typeof quote.clientId === 'object' ? quote.clientId : null;
 
-  // Parsear servicios y repuestos
-  let services: any[] = [];
-  let parts: any[] = [];
-  try {
-    const proposedWork = JSON.parse(quote.proposedWork);
-    services = proposedWork.services || [];
-    parts = proposedWork.parts || [];
-  } catch (error) {
-    console.error('Error parsing proposedWork:', error);
-  }
+  // ✅ Parsear proposedWork usando la función helper
+  const proposedWorkData = parseProposedWork(quote.proposedWork);
+  const services = proposedWorkData.services;
+  const parts = proposedWorkData.parts;
+  const externalParts = proposedWorkData.externalParts;
 
-  const subtotalServices = services.reduce((sum, s) => sum + s.price, 0);
-  const subtotalParts = parts.reduce((sum, p) => sum + p.price * p.quantity, 0);
-  const subtotal = subtotalServices + subtotalParts;
+  const subtotalServices = services.reduce((sum, s) => sum + (s.price || 0), 0);
+  const subtotalParts = parts.reduce((sum, p) => sum + (p.price || 0) * (p.quantity || 1), 0);
+  const subtotalExternalParts = externalParts.reduce((sum, p) => sum + (p.price || 0) * (p.quantity || 1), 0);
+  const subtotal = subtotalServices + subtotalParts + subtotalExternalParts;
   const iva = Math.round(subtotal * 0.19);
   const total = subtotal + iva;
 
@@ -148,7 +244,27 @@ const QuoteDetail: React.FC = () => {
           {getStatusTag(quote.status)}
         </Space>
 
-        <Space>
+        <Space wrap>
+          {/* Botones de PDF */}
+          <Button
+            icon={<DownloadOutlined />}
+            size="large"
+            onClick={handleDownloadPDF}
+            loading={pdfLoading}
+            style={{ background: '#52c41a', color: 'white', borderColor: '#52c41a' }}
+          >
+            Descargar PDF
+          </Button>
+          
+          <Button
+            icon={<PrinterOutlined />}
+            size="large"
+            onClick={handlePrintPDF}
+            loading={pdfLoading}
+          >
+            Imprimir
+          </Button>
+
           {quote.status === 'pending' && (
             <>
               <Popconfirm
@@ -184,9 +300,6 @@ const QuoteDetail: React.FC = () => {
               Enviar por Email
             </Button>
           )}
-          <Button icon={<FilePdfOutlined />} size="large">
-            Descargar PDF
-          </Button>
         </Space>
       </div>
 
@@ -232,71 +345,134 @@ const QuoteDetail: React.FC = () => {
         <Text>{quote.description}</Text>
       </Card>
 
-      {/* Servicios */}
-      <Card title={`Servicios (${services.length})`}>
-        {services.length === 0 ? (
-          <Text type="secondary">No hay servicios</Text>
-        ) : (
-          <List
-            dataSource={services}
-            renderItem={(service: any) => (
-              <List.Item>
-                <List.Item.Meta title={service.name} description={service.description} />
-                <Text strong style={{ fontSize: 16 }}>
-                  ${service.price.toLocaleString('es-CL')}
-                </Text>
-              </List.Item>
-            )}
-          />
-        )}
-        <Divider />
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Text strong>Subtotal Servicios:</Text>
-          <Text strong style={{ fontSize: 16 }}>
-            ${subtotalServices.toLocaleString('es-CL')}
-          </Text>
-        </div>
-      </Card>
-
-      {/* Repuestos */}
-      <Card title={`Repuestos (${parts.length})`}>
-        {parts.length === 0 ? (
-          <Text type="secondary">No hay repuestos</Text>
-        ) : (
-          <List
-            dataSource={parts}
-            renderItem={(part: any) => (
-              <List.Item>
-                <List.Item.Meta
-                  title={
-                    <Space>
-                      {part.name}
-                      <Tag>{part.category}</Tag>
-                    </Space>
-                  }
-                  description={part.description}
+      {/* Trabajo Propuesto - ACTUALIZADO para manejar ambos formatos */}
+      <Card title="Trabajo Propuesto">
+        {proposedWorkData.isJSON ? (
+          // Formato JSON (antiguo) - Mostrar servicios y repuestos estructurados
+          <>
+            {/* Servicios */}
+            {services.length > 0 && (
+              <>
+                <Title level={5}>Servicios ({services.length})</Title>
+                <List
+                  dataSource={services}
+                  renderItem={(service: any) => (
+                    <List.Item>
+                      <List.Item.Meta title={service.name} description={service.description} />
+                      <Text strong style={{ fontSize: 16 }}>
+                        ${(service.price || 0).toLocaleString('es-CL')}
+                      </Text>
+                    </List.Item>
+                  )}
                 />
-                <div style={{ textAlign: 'right' }}>
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      {part.quantity} x ${part.price.toLocaleString('es-CL')}
-                    </Text>
-                  </div>
+                <Divider />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text strong>Subtotal Servicios:</Text>
                   <Text strong style={{ fontSize: 16 }}>
-                    ${(part.price * part.quantity).toLocaleString('es-CL')}
+                    ${subtotalServices.toLocaleString('es-CL')}
                   </Text>
                 </div>
-              </List.Item>
+              </>
             )}
-          />
+
+            {/* Repuestos */}
+            {parts.length > 0 && (
+              <>
+                <Divider />
+                <Title level={5}>Repuestos ({parts.length})</Title>
+                <List
+                  dataSource={parts}
+                  renderItem={(part: any) => (
+                    <List.Item>
+                      <List.Item.Meta
+                        title={
+                          <Space>
+                            {part.name}
+                            {part.category && <Tag>{part.category}</Tag>}
+                          </Space>
+                        }
+                        description={part.description}
+                      />
+                      <div style={{ textAlign: 'right' }}>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {part.quantity} x ${(part.price || 0).toLocaleString('es-CL')}
+                          </Text>
+                        </div>
+                        <Text strong style={{ fontSize: 16 }}>
+                          ${((part.price || 0) * (part.quantity || 1)).toLocaleString('es-CL')}
+                        </Text>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+                <Divider />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text strong>Subtotal Repuestos:</Text>
+                  <Text strong style={{ fontSize: 16 }}>
+                    ${subtotalParts.toLocaleString('es-CL')}
+                  </Text>
+                </div>
+              </>
+            )}
+
+            {/* Repuestos Externos */}
+            {externalParts.length > 0 && (
+              <>
+                <Divider />
+                <Title level={5}>Repuestos Externos ({externalParts.length})</Title>
+                <List
+                  dataSource={externalParts}
+                  renderItem={(part: any) => (
+                    <List.Item>
+                      <List.Item.Meta
+                        title={
+                          <Space>
+                            {part.name}
+                            <Tag color="orange">Externo</Tag>
+                          </Space>
+                        }
+                        description={part.description}
+                      />
+                      <div style={{ textAlign: 'right' }}>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {part.quantity} x ${(part.price || 0).toLocaleString('es-CL')}
+                          </Text>
+                        </div>
+                        <Text strong style={{ fontSize: 16 }}>
+                          ${((part.price || 0) * (part.quantity || 1)).toLocaleString('es-CL')}
+                        </Text>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+                <Divider />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text strong>Subtotal Repuestos Externos:</Text>
+                  <Text strong style={{ fontSize: 16 }}>
+                    ${subtotalExternalParts.toLocaleString('es-CL')}
+                  </Text>
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          // Formato texto plano (nuevo) - Mostrar como está
+          <pre style={{ 
+            whiteSpace: 'pre-wrap', 
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            fontSize: '14px',
+            backgroundColor: '#fafafa',
+            padding: '16px',
+            borderRadius: '8px',
+            border: '1px solid #f0f0f0',
+            margin: 0,
+            lineHeight: '1.8'
+          }}>
+            {proposedWorkData.text}
+          </pre>
         )}
-        <Divider />
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Text strong>Subtotal Repuestos:</Text>
-          <Text strong style={{ fontSize: 16 }}>
-            ${subtotalParts.toLocaleString('es-CL')}
-          </Text>
-        </div>
       </Card>
 
       {/* Resumen de Costos */}

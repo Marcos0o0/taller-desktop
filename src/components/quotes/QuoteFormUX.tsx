@@ -165,16 +165,18 @@ const QuoteFormUX: React.FC<QuoteFormProps> = ({ onSubmit, loading = false }) =>
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);
+    // Asegurarse de que el clientId se guarde correctamente en el formulario
     form.setFieldsValue({ clientId: client._id });
+    // También forzar la validación del campo
+    form.validateFields(['clientId']).catch(() => {});
     message.success(`Cliente seleccionado: ${client.firstName} ${client.lastName1}`);
     
-    // Cargar último vehículo si existe (simulado - deberías implementar esto en tu backend)
-    // Por ahora, dejamos los campos vacíos para que el usuario los llene
+    console.log('Cliente seleccionado:', client._id); // DEBUG
   };
 
   const handleBrandChange = (value: string) => {
     setSelectedBrand(value);
-    form.setFieldValue('model', undefined); // Resetear modelo cuando cambia marca
+    form.setFieldValue('model', undefined);
   };
 
   const handleAddService = () => {
@@ -288,12 +290,77 @@ const QuoteFormUX: React.FC<QuoteFormProps> = ({ onSubmit, loading = false }) =>
     return calculateSubtotal() + calculateIVA();
   };
 
+  // FUNCIÓN MEJORADA: Genera un resumen corto del trabajo propuesto
+  const generateProposedWorkSummary = () => {
+    let summary = '';
+
+    // Agregar servicios
+    if (services.length > 0) {
+      summary += 'SERVICIOS:\n';
+      services.forEach((s, idx) => {
+        summary += `${idx + 1}. ${s.name} - $${s.price.toLocaleString('es-CL')}\n`;
+        if (s.description) {
+          summary += `   ${s.description}\n`;
+        }
+      });
+      summary += '\n';
+    }
+
+    // Agregar repuestos de inventario
+    if (selectedParts.length > 0) {
+      summary += 'REPUESTOS (Inventario):\n';
+      selectedParts.forEach((sp, idx) => {
+        summary += `${idx + 1}. ${sp.product.name} - Cant: ${sp.quantity} - $${(sp.product.price * sp.quantity).toLocaleString('es-CL')}\n`;
+      });
+      summary += '\n';
+    }
+
+    // Agregar repuestos externos
+    if (externalParts.length > 0) {
+      summary += 'REPUESTOS EXTERNOS (A comprar):\n';
+      externalParts.forEach((ep, idx) => {
+        summary += `${idx + 1}. ${ep.name} - Cant: ${ep.quantity} - $${(ep.price * ep.quantity).toLocaleString('es-CL')}\n`;
+      });
+      summary += '\n';
+    }
+
+    // Agregar totales
+    summary += `SUBTOTAL SERVICIOS: $${calculateSubtotalServices().toLocaleString('es-CL')}\n`;
+    summary += `SUBTOTAL REPUESTOS: $${calculateSubtotalParts().toLocaleString('es-CL')}\n`;
+    summary += `SUBTOTAL: $${calculateSubtotal().toLocaleString('es-CL')}\n`;
+    summary += `IVA (19%): $${calculateIVA().toLocaleString('es-CL')}\n`;
+    summary += `TOTAL: $${calculateTotal().toLocaleString('es-CL')}`;
+
+    // Truncar si excede 2000 caracteres (límite del backend)
+    if (summary.length > 1900) {
+      summary = summary.substring(0, 1900) + '\n...(contenido truncado)';
+    }
+
+    return summary;
+  };
+
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
 
+      // 🔍 VALIDACIÓN CRÍTICA: Verificar que clientId existe
+      if (!values.clientId) {
+        message.error('Debe seleccionar un cliente. Use el botón "Búsqueda Rápida" o el selector de clientes.');
+        console.error('❌ clientId is missing from form values:', values);
+        return;
+      }
+
       if (services.length === 0) {
         message.error('Debe agregar al menos un servicio');
+        return;
+      }
+
+      // Generar el resumen del trabajo propuesto
+      const proposedWorkText = generateProposedWorkSummary();
+
+      // Verificar longitud mínima (20 caracteres)
+      if (proposedWorkText.length < 20) {
+        message.error('El trabajo propuesto debe tener al menos 20 caracteres');
         return;
       }
 
@@ -307,29 +374,21 @@ const QuoteFormUX: React.FC<QuoteFormProps> = ({ onSubmit, loading = false }) =>
           mileage: values.mileage,
         },
         description: values.description,
-        proposedWork: JSON.stringify({
-          services,
-          parts: selectedParts.map((sp) => ({
-            id: sp.product._id,
-            name: sp.product.name,
-            description: sp.product.description,
-            quantity: sp.quantity,
-            price: sp.product.price,
-            category: sp.product.category,
-            isExternal: false,
-          })),
-          externalParts: externalParts.map((ep) => ({
-            id: ep.id,
-            name: ep.name,
-            description: ep.description,
-            quantity: ep.quantity,
-            price: ep.price,
-            isExternal: true,
-          })),
-        }),
+        // ✅ CAMBIO PRINCIPAL: Ahora envía un string formateado en lugar de JSON
+        proposedWork: proposedWorkText,
         estimatedCost: calculateTotal(),
         notes: values.notes || '',
       };
+
+      // 🔍 DEBUG - Mostrar datos antes de enviar
+      console.log('=== DATOS A ENVIAR ===');
+      console.log('clientId:', quoteData.clientId);
+      console.log('vehicle:', quoteData.vehicle);
+      console.log('description length:', quoteData.description.length);
+      console.log('proposedWork length:', quoteData.proposedWork.length);
+      console.log('proposedWork:', quoteData.proposedWork);
+      console.log('estimatedCost:', quoteData.estimatedCost);
+      console.log('======================');
 
       await onSubmit(quoteData);
     } catch (error) {
@@ -427,26 +486,32 @@ const QuoteFormUX: React.FC<QuoteFormProps> = ({ onSubmit, loading = false }) =>
             <Row gutter={16}>
               <Col xs={24} md={selectedClient ? 24 : 12}>
                 {selectedClient ? (
-                  <Card size="small" style={{ backgroundColor: '#f0f5ff' }}>
-                    <Space direction="vertical" size="small">
-                      <Text strong style={{ fontSize: 16 }}>
-                        {selectedClient.firstName} {selectedClient.lastName1} {selectedClient.lastName2 || ''}
-                      </Text>
-                      <Text type="secondary">📞 {selectedClient.phone}</Text>
-                      <Text type="secondary">🆔 {selectedClient.rut}</Text>
-                      {selectedClient.email && <Text type="secondary">✉️ {selectedClient.email}</Text>}
-                      <Button
-                        type="link"
-                        size="small"
-                        onClick={() => {
-                          setSelectedClient(null);
-                          form.setFieldValue('clientId', undefined);
-                        }}
-                      >
-                        Cambiar cliente
-                      </Button>
-                    </Space>
-                  </Card>
+                  <>
+                    {/* Campo oculto para mantener el clientId en el formulario */}
+                    <Form.Item name="clientId" hidden>
+                      <Input />
+                    </Form.Item>
+                    <Card size="small" style={{ backgroundColor: '#f0f5ff' }}>
+                      <Space direction="vertical" size="small">
+                        <Text strong style={{ fontSize: 16 }}>
+                          {selectedClient.firstName} {selectedClient.lastName1} {selectedClient.lastName2 || ''}
+                        </Text>
+                        <Text type="secondary">📞 {selectedClient.phone}</Text>
+                        <Text type="secondary">🆔 ID: {selectedClient._id}</Text>
+                        {selectedClient.email && <Text type="secondary">✉️ {selectedClient.email}</Text>}
+                        <Button
+                          type="link"
+                          size="small"
+                          onClick={() => {
+                            setSelectedClient(null);
+                            form.setFieldValue('clientId', undefined);
+                          }}
+                        >
+                          Cambiar cliente
+                        </Button>
+                      </Space>
+                    </Card>
+                  </>
                 ) : (
                   <Form.Item
                     name="clientId"
