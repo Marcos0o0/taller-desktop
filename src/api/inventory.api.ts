@@ -14,6 +14,7 @@ export interface Product {
   location?: string;
   supplier?: string;
   specifications?: Record<string, any>; // 🔥 NUEVO: Campo para especificaciones técnicas
+  imageUrl?: string;
   isActive: boolean;
   isDeleted: boolean;
   createdAt: string;

@@ -225,61 +225,127 @@ export const generateQuotePDF = (data: QuotePDFData): jsPDF => {
   yPosition += (description.length * 5) + 8;
 
   // ============================================
-  // TABLA DE SERVICIOS
+  // TRABAJO PROPUESTO
   // ============================================
   
-  if (services.length > 0) {
-    // Verificar espacio disponible
-    if (yPosition > pageHeight - 80) {
-      doc.addPage();
-      yPosition = 20;
-    }
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(41, 128, 185);
-    doc.text('SERVICIOS', marginLeft, yPosition);
-    yPosition += 6;
-
-    const servicesData = services.map((service) => [
-      service.name,
-      service.description || '-',
-      `$${service.price.toLocaleString('es-CL')}`,
-    ]);
-
-    autoTable(doc, {
-      startY: yPosition,
-      head: [['Servicio', 'Descripción', 'Precio']],
-      body: servicesData,
-      theme: 'striped',
-      headStyles: {
-        fillColor: [41, 128, 185],
-        textColor: 255,
-        fontStyle: 'bold',
-        fontSize: 10,
-      },
-      styles: {
-        fontSize: 9,
-        cellPadding: 4,
-      },
-      columnStyles: {
-        0: { cellWidth: 50 },
-        1: { cellWidth: 90 },
-        2: { cellWidth: 40, halign: 'right', fontStyle: 'bold' },
-      },
-      margin: { left: marginLeft, right: marginRight },
-    });
-
-    yPosition = doc.lastAutoTable.finalY + 8;
+  // ✅ Determinar si proposedWork es JSON o texto plano
+  let isProposedWorkJSON = false;
+  try {
+    JSON.parse(quote.proposedWork);
+    isProposedWorkJSON = true;
+  } catch {
+    isProposedWorkJSON = false;
   }
 
-  // ============================================
-  // TABLA DE REPUESTOS
-  // ============================================
-  
-  if (parts.length > 0) {
+  if (isProposedWorkJSON && (services.length > 0 || parts.length > 0)) {
+    // ============================================
+    // FORMATO JSON: TABLA DE SERVICIOS
+    // ============================================
+    
+    if (services.length > 0) {
+      // Verificar espacio disponible
+      if (yPosition > pageHeight - 80) {
+        doc.addPage();
+        yPosition = 20;
+      }
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(41, 128, 185);
+      doc.text('SERVICIOS', marginLeft, yPosition);
+      yPosition += 6;
+
+      const servicesData = services.map((service) => [
+        service.name,
+        service.description || '-',
+        `$${service.price.toLocaleString('es-CL')}`,
+      ]);
+
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Servicio', 'Descripción', 'Precio']],
+        body: servicesData,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [41, 128, 185],
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 10,
+        },
+        styles: {
+          fontSize: 9,
+          cellPadding: 4,
+        },
+        columnStyles: {
+          0: { cellWidth: 50 },
+          1: { cellWidth: 90 },
+          2: { cellWidth: 40, halign: 'right', fontStyle: 'bold' },
+        },
+        margin: { left: marginLeft, right: marginRight },
+      });
+
+      yPosition = doc.lastAutoTable.finalY + 8;
+    }
+
+    // ============================================
+    // FORMATO JSON: TABLA DE REPUESTOS
+    // ============================================
+    
+    if (parts.length > 0) {
+      // Verificar espacio disponible
+      if (yPosition > pageHeight - 80) {
+        doc.addPage();
+        yPosition = 20;
+      }
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(41, 128, 185);
+      doc.text('REPUESTOS Y MATERIALES', marginLeft, yPosition);
+      yPosition += 6;
+
+      const partsData = parts.map((part) => [
+        part.name,
+        part.description || '-',
+        part.quantity.toString(),
+        `$${part.price.toLocaleString('es-CL')}`,
+        `$${(part.price * part.quantity).toLocaleString('es-CL')}`,
+      ]);
+
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Repuesto', 'Descripción', 'Cant.', 'P. Unit.', 'Subtotal']],
+        body: partsData,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [41, 128, 185],
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 10,
+        },
+        styles: {
+          fontSize: 9,
+          cellPadding: 4,
+        },
+        columnStyles: {
+          0: { cellWidth: 45 },
+          1: { cellWidth: 65 },
+          2: { cellWidth: 20, halign: 'center' },
+          3: { cellWidth: 30, halign: 'right' },
+          4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
+        },
+        margin: { left: marginLeft, right: marginRight },
+      });
+
+      yPosition = doc.lastAutoTable.finalY + 8;
+    }
+  } else {
+    // ============================================
+    // FORMATO TEXTO PLANO: MOSTRAR COMO TEXTO
+    // ============================================
+    
     // Verificar espacio disponible
-    if (yPosition > pageHeight - 80) {
+    if (yPosition > pageHeight - 100) {
       doc.addPage();
       yPosition = 20;
     }
@@ -287,43 +353,30 @@ export const generateQuotePDF = (data: QuotePDFData): jsPDF => {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(41, 128, 185);
-    doc.text('REPUESTOS Y MATERIALES', marginLeft, yPosition);
+    doc.text('TRABAJO PROPUESTO', marginLeft, yPosition);
     yPosition += 6;
-
-    const partsData = parts.map((part) => [
-      part.name,
-      part.description || '-',
-      part.quantity.toString(),
-      `$${part.price.toLocaleString('es-CL')}`,
-      `$${(part.price * part.quantity).toLocaleString('es-CL')}`,
-    ]);
-
-    autoTable(doc, {
-      startY: yPosition,
-      head: [['Repuesto', 'Descripción', 'Cant.', 'P. Unit.', 'Subtotal']],
-      body: partsData,
-      theme: 'striped',
-      headStyles: {
-        fillColor: [41, 128, 185],
-        textColor: 255,
-        fontStyle: 'bold',
-        fontSize: 10,
-      },
-      styles: {
-        fontSize: 9,
-        cellPadding: 4,
-      },
-      columnStyles: {
-        0: { cellWidth: 45 },
-        1: { cellWidth: 65 },
-        2: { cellWidth: 20, halign: 'center' },
-        3: { cellWidth: 30, halign: 'right' },
-        4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
-      },
-      margin: { left: marginLeft, right: marginRight },
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(9);
+    
+    // Dividir el texto en líneas respetando los saltos de línea
+    const proposedWorkLines = quote.proposedWork.split('\n');
+    
+    proposedWorkLines.forEach((line) => {
+      // Verificar si necesitamos nueva página
+      if (yPosition > pageHeight - 20) {
+        doc.addPage();
+        yPosition = 20;
+      }
+      
+      // Dividir líneas largas
+      const wrappedLines = doc.splitTextToSize(line || ' ', contentWidth);
+      doc.text(wrappedLines, marginLeft, yPosition);
+      yPosition += wrappedLines.length * 5;
     });
-
-    yPosition = doc.lastAutoTable.finalY + 8;
+    
+    yPosition += 8;
   }
 
   // ============================================
@@ -336,11 +389,22 @@ export const generateQuotePDF = (data: QuotePDFData): jsPDF => {
     yPosition = 20;
   }
 
-  const subtotalServices = services.reduce((sum, s) => sum + s.price, 0);
-  const subtotalParts = parts.reduce((sum, p) => sum + p.price * p.quantity, 0);
-  const subtotal = subtotalServices + subtotalParts;
-  const iva = Math.round(subtotal * (TALLER_CONFIG.iva / 100));
-  const total = subtotal + iva;
+  // ✅ Calcular totales según el formato
+  let subtotal, iva, total;
+  
+  if (isProposedWorkJSON && (services.length > 0 || parts.length > 0)) {
+    // Calcular desde servicios y repuestos
+    const subtotalServices = services.reduce((sum, s) => sum + s.price, 0);
+    const subtotalParts = parts.reduce((sum, p) => sum + p.price * p.quantity, 0);
+    subtotal = subtotalServices + subtotalParts;
+    iva = Math.round(subtotal * (TALLER_CONFIG.iva / 100));
+    total = subtotal + iva;
+  } else {
+    // Usar estimatedCost del quote
+    total = quote.estimatedCost;
+    subtotal = Math.round(total / (1 + TALLER_CONFIG.iva / 100));
+    iva = total - subtotal;
+  }
 
   const totalsX = pageWidth - marginRight - 70;
   const totalsWidth = 70;

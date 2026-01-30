@@ -28,7 +28,6 @@ export const TALLER_CONFIG: TallerConfig = {
   ciudad: 'Santiago, Chile',
   telefono: '+56 9 6475 8776',
   email: 'automotrizf16@gmail.com',
-  web: 'www.portezuelo.cl',
   jefe: {
     nombre: 'Marcos Godoy',
     cargo: 'Jefe de Taller',

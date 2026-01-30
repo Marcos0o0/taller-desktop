@@ -1,12 +1,30 @@
-import React, { useEffect, useState } from 'react';
-import { Modal, Form, Input, InputNumber, Select, Row, Col, Space, Typography, Divider, Collapse } from 'antd';
-import { BarcodeOutlined, DollarOutlined, InboxOutlined, ShopOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import {
+  Modal,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  Switch,
+  Space,
+  Row,
+  Col,
+  message,
+  Upload,
+  Image,
+  Button,
+  Typography,
+} from 'antd';
+import {
+  PlusOutlined,
+  DeleteOutlined,
+  CameraOutlined,
+} from '@ant-design/icons';
+import type { UploadFile, UploadProps } from 'antd';
 import { Product } from '@api/inventory.api';
-import { categorySpecifications, CategorySpec, getSpecsForCategory } from '@types/product-specifications.types';
 
 const { TextArea } = Input;
 const { Text } = Typography;
-const { Panel } = Collapse;
 
 interface ProductFormModalProps {
   open: boolean;
@@ -23,401 +41,431 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
   scannedBarcode,
   onOk,
   onCancel,
-  loading = false,
+  loading,
 }) => {
   const [form] = Form.useForm();
-  const [selectedCategory, setSelectedCategory] = useState<string>('repuestos');
-  const [categorySpecs, setCategorySpecs] = useState<CategorySpec[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [fileList, setFileList] = useState<UploadFile[]>([]);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState('');
 
   useEffect(() => {
-    if (open && product) {
-      // Editar producto existente
-      setSelectedCategory(product.category);
-      form.setFieldsValue({
-        barcode: product.barcode,
-        name: product.name,
-        description: product.description || '',
-        category: product.category,
-        price: product.price,
-        costPrice: product.costPrice || 0,
-        stock: product.stock,
-        minStock: product.minStock,
-        location: product.location || '',
-        supplier: product.supplier || '',
-        // Cargar especificaciones si existen
-        ...(product.specifications || {}),
-      });
-
-    } else if (open && scannedBarcode) {
-      // Nuevo producto con código escaneado
-      form.setFieldsValue({ barcode: scannedBarcode, category: 'repuestos' });
-      setSelectedCategory('repuestos');
-    } else if (open) {
-      // Nuevo producto sin código
-      form.resetFields();
-      setSelectedCategory('repuestos');
+    if (open) {
+      if (product) {
+        // Editar producto existente
+        form.setFieldsValue({
+          ...product,
+          specifications: product.specifications || {},
+        });
+        setSelectedCategory(product.category);
+        
+        // Cargar imagen existente
+        if (product.imageUrl) {
+          setFileList([
+            {
+              uid: '-1',
+              name: 'image.png',
+              status: 'done',
+              url: product.imageUrl,
+            },
+          ]);
+        } else {
+          setFileList([]);
+        }
+      } else {
+        // Nuevo producto
+        form.resetFields();
+        setFileList([]);
+        
+        if (scannedBarcode) {
+          form.setFieldValue('barcode', scannedBarcode);
+        }
+      }
     }
   }, [open, product, scannedBarcode, form]);
 
-  useEffect(() => {
-    // Actualizar especificaciones cuando cambia la categoría
-    const specs = getSpecsForCategory(selectedCategory);
-    setCategorySpecs(specs);
-    
-  }, [selectedCategory]);
+  const handleCategoryChange = (value: string) => {
+    setSelectedCategory(value);
+    // Limpiar especificaciones al cambiar categoría
+    form.setFieldValue('specifications', {});
+  };
+
+  const handlePreview = async (file: UploadFile) => {
+    if (!file.url && !file.preview) {
+      file.preview = await getBase64(file.originFileObj as File);
+    }
+    setPreviewImage(file.url || (file.preview as string));
+    setPreviewOpen(true);
+  };
+
+  const handleChange: UploadProps['onChange'] = ({ fileList: newFileList }) => {
+    setFileList(newFileList);
+  };
+
+  const beforeUpload = (file: File) => {
+    const isImage = file.type.startsWith('image/');
+    if (!isImage) {
+      message.error('Solo puedes subir archivos de imagen!');
+      return false;
+    }
+    const isLt2M = file.size / 1024 / 1024 < 2;
+    if (!isLt2M) {
+      message.error('La imagen debe ser menor a 2MB!');
+      return false;
+    }
+    return false; // Prevenir subida automática
+  };
+
+  const getBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
 
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
       
-      
-      // Separar especificaciones de campos básicos
-      const basicFields = ['barcode', 'name', 'description', 'category', 'price', 'costPrice', 'stock', 'minStock', 'location', 'supplier'];
-      const specifications: Record<string, any> = {};
-      
-      Object.keys(values).forEach(key => {
-        if (!basicFields.includes(key)) {
-          specifications[key] = values[key];
-          delete values[key];
-        }
-      });
+      // Convertir imagen a base64 si existe
+      let imageBase64 = null;
+      if (fileList.length > 0 && fileList[0].originFileObj) {
+        imageBase64 = await getBase64(fileList[0].originFileObj as File);
+      } else if (fileList.length > 0 && fileList[0].url) {
+        // Mantener URL existente
+        imageBase64 = fileList[0].url;
+      }
 
-
-      // Agregar especificaciones al objeto final
-      const finalValues = {
+      const formData = {
         ...values,
-        specifications: Object.keys(specifications).length > 0 ? specifications : undefined,
+        imageUrl: imageBase64,
       };
 
-      await onOk(finalValues);
+      await onOk(formData);
       form.resetFields();
-      setSelectedCategory('repuestos');
+      setFileList([]);
     } catch (error) {
-      console.log('❌ Error en validación:', error);
+      console.error('Validation failed:', error);
     }
   };
 
-  const handleCancel = () => {
-    form.resetFields();
-    setSelectedCategory('repuestos');
-    onCancel();
-  };
+  const uploadButton = (
+    <div>
+      <PlusOutlined />
+      <div style={{ marginTop: 8 }}>Subir Foto</div>
+    </div>
+  );
 
-  const handleCategoryChange = (category: string) => {
-    setSelectedCategory(category);
-    // Limpiar campos de especificaciones anteriores
-    const specs = getSpecsForCategory(selectedCategory);
-    const fieldsToReset = specs.map(s => s.field);
-    form.resetFields(fieldsToReset);
-  };
+  // Renderizar campos de especificaciones según categoría
+  const renderSpecifications = () => {
+    if (!selectedCategory) return null;
 
-  const categories = [
-    { value: 'repuestos', label: 'Repuestos' },
-    { value: 'lubricantes', label: 'Lubricantes y Aceites' },
-    { value: 'filtros', label: 'Filtros' },
-    { value: 'frenos', label: 'Frenos' },
-    { value: 'suspension', label: 'Suspensión' },
-    { value: 'electrico', label: 'Eléctrico' },
-    { value: 'carroceria', label: 'Carrocería' },
-    { value: 'neumaticos', label: 'Neumáticos' },
-    { value: 'herramientas', label: 'Herramientas' },
-    { value: 'accesorios', label: 'Accesorios' },
-    { value: 'consumibles', label: 'Consumibles' },
-    { value: 'otros', label: 'Otros' },
-  ];
-
-  const renderSpecificationField = (spec: CategorySpec) => {
-    const commonProps = {
-      size: 'large' as const,
-      placeholder: spec.placeholder,
-    };
-
-    switch (spec.type) {
-      case 'select':
+    switch (selectedCategory) {
+      case 'lubricantes':
         return (
-          <Select {...commonProps} options={spec.options?.map(opt => ({ value: opt, label: opt }))} />
+          <>
+            <Col xs={24} md={8}>
+              <Form.Item name={['specifications', 'viscosity']} label="Viscosidad">
+                <Input placeholder="Ej: 5W-30" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name={['specifications', 'volume']} label="Volumen">
+                <Input placeholder="Ej: 4L, 1L" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name={['specifications', 'type']} label="Tipo">
+                <Select placeholder="Seleccionar tipo">
+                  <Select.Option value="mineral">Mineral</Select.Option>
+                  <Select.Option value="sintetico">Sintético</Select.Option>
+                  <Select.Option value="semisintetico">Semi-sintético</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </>
         );
-      case 'number':
+
+      case 'filtros':
         return (
-          <InputNumber
-            {...commonProps}
-            style={{ width: '100%' }}
-            min={0}
-            suffix={spec.suffix}
-          />
+          <>
+            <Col xs={24} md={8}>
+              <Form.Item name={['specifications', 'filterType']} label="Tipo de Filtro">
+                <Select placeholder="Seleccionar tipo">
+                  <Select.Option value="aceite">Aceite</Select.Option>
+                  <Select.Option value="aire">Aire</Select.Option>
+                  <Select.Option value="combustible">Combustible</Select.Option>
+                  <Select.Option value="cabina">Cabina</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name={['specifications', 'compatibility']} label="Compatibilidad">
+                <Input placeholder="Ej: Toyota Corolla 2010-2015" />
+              </Form.Item>
+            </Col>
+          </>
         );
-      case 'text':
+
+      case 'neumaticos':
+        return (
+          <>
+            <Col xs={24} md={6}>
+              <Form.Item name={['specifications', 'size']} label="Medida">
+                <Input placeholder="Ej: 205/55R16" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item name={['specifications', 'brand']} label="Marca">
+                <Input placeholder="Ej: Michelin" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item name={['specifications', 'season']} label="Temporada">
+                <Select placeholder="Seleccionar">
+                  <Select.Option value="verano">Verano</Select.Option>
+                  <Select.Option value="invierno">Invierno</Select.Option>
+                  <Select.Option value="todo-terreno">Todo Terreno</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item name={['specifications', 'loadIndex']} label="Índice de Carga">
+                <Input placeholder="Ej: 91H" />
+              </Form.Item>
+            </Col>
+          </>
+        );
+
+      case 'frenos':
+        return (
+          <>
+            <Col xs={24} md={8}>
+              <Form.Item name={['specifications', 'type']} label="Tipo">
+                <Select placeholder="Seleccionar tipo">
+                  <Select.Option value="pastillas">Pastillas</Select.Option>
+                  <Select.Option value="discos">Discos</Select.Option>
+                  <Select.Option value="tambores">Tambores</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name={['specifications', 'position']} label="Posición">
+                <Select placeholder="Seleccionar">
+                  <Select.Option value="delantero">Delantero</Select.Option>
+                  <Select.Option value="trasero">Trasero</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name={['specifications', 'compatibility']} label="Compatibilidad">
+                <Input placeholder="Modelos compatibles" />
+              </Form.Item>
+            </Col>
+          </>
+        );
+
+      case 'electrico':
+        return (
+          <>
+            <Col xs={24} md={8}>
+              <Form.Item name={['specifications', 'voltage']} label="Voltaje">
+                <Input placeholder="Ej: 12V" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name={['specifications', 'amperage']} label="Amperaje">
+                <Input placeholder="Ej: 60A" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name={['specifications', 'partType']} label="Tipo de Pieza">
+                <Select placeholder="Seleccionar">
+                  <Select.Option value="bateria">Batería</Select.Option>
+                  <Select.Option value="alternador">Alternador</Select.Option>
+                  <Select.Option value="motor-arranque">Motor de Arranque</Select.Option>
+                  <Select.Option value="sensor">Sensor</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </>
+        );
+
       default:
-        return <Input {...commonProps} />;
+        return (
+          <Col xs={24}>
+            <Form.Item name={['specifications', 'compatibility']} label="Compatibilidad / Notas">
+              <Input placeholder="Información adicional del producto" />
+            </Form.Item>
+          </Col>
+        );
     }
   };
 
   return (
-    <Modal
-      title={
-        product
-          ? `Editar Producto: ${product.name}`
-          : scannedBarcode
-          ? `Nuevo Producto - Código: ${scannedBarcode}`
-          : 'Nuevo Producto'
-      }
-      open={open}
-      onOk={handleOk}
-      onCancel={handleCancel}
-      confirmLoading={loading}
-      width={900}
-      okText={product ? 'Actualizar' : 'Guardar'}
-      cancelText="Cancelar"
-      style={{ top: 20 }}
-    >
-      <Form
-        form={form}
-        layout="vertical"
-        name="product_form"
-        initialValues={{
-          barcode: scannedBarcode || '',
-          stock: 0,
-          minStock: 0,
-          category: 'repuestos',
-          price: 0,
-          costPrice: 0,
-        }}
+    <>
+      <Modal
+        title={product ? 'Editar Producto' : 'Nuevo Producto'}
+        open={open}
+        onOk={handleOk}
+        onCancel={onCancel}
+        width={900}
+        confirmLoading={loading}
+        okText={product ? 'Actualizar' : 'Crear'}
+        cancelText="Cancelar"
       >
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-          {/* Información Básica */}
-          <div>
-            <Text strong style={{ fontSize: 15 }}>
-              📋 Información Básica
-            </Text>
-            <Divider style={{ margin: '8px 0' }} />
+        <Form form={form} layout="vertical" size="large">
+          <Row gutter={16}>
+            {/* Foto del producto */}
+            <Col xs={24}>
+              <Form.Item label="Foto del Producto">
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Upload
+                    listType="picture-card"
+                    fileList={fileList}
+                    onPreview={handlePreview}
+                    onChange={handleChange}
+                    beforeUpload={beforeUpload}
+                    maxCount={1}
+                  >
+                    {fileList.length === 0 && uploadButton}
+                  </Upload>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    📸 Sube una foto clara del producto. Máximo 2MB. JPG, PNG o WEBP.
+                  </Text>
+                </Space>
+              </Form.Item>
+            </Col>
 
-            <Form.Item
-              name="barcode"
-              label="Código de Barras"
-              rules={[
-                { required: true, message: 'Por favor ingrese el código de barras' },
-                { min: 3, message: 'Mínimo 3 caracteres' },
-                { max: 50, message: 'Máximo 50 caracteres' },
-              ]}
-            >
-              <Input
-                placeholder="Escanee o ingrese el código de barras"
-                size="large"
-                prefix={<BarcodeOutlined />}
-                disabled={!!product}
-              />
-            </Form.Item>
-
-            <Form.Item
-              name="category"
-              label="Categoría"
-              rules={[{ required: true, message: 'Seleccione una categoría' }]}
-            >
-              <Select 
-                size="large" 
-                options={categories} 
-                onChange={handleCategoryChange}
-              />
-            </Form.Item>
-
-            <Form.Item
-              name="name"
-              label="Nombre del Producto"
-              rules={[
-                { required: true, message: 'Por favor ingrese el nombre' },
-                { min: 3, message: 'Mínimo 3 caracteres' },
-                { max: 100, message: 'Máximo 100 caracteres' },
-              ]}
-            >
-              <Input placeholder="Ej: Filtro de aceite Toyota" size="large" />
-            </Form.Item>
-
-            <Form.Item name="description" label="Descripción">
-              <TextArea
-                placeholder="Descripción detallada del producto, especificaciones, compatibilidad..."
-                rows={3}
-                maxLength={500}
-                showCount
-              />
-            </Form.Item>
-          </div>
-
-          {/* Especificaciones por Categoría */}
-          {categorySpecs.length > 0 && (
-            <Collapse defaultActiveKey={['specs']} ghost>
-              <Panel 
-                header={
-                  <Space>
-                    <InfoCircleOutlined style={{ color: '#1890ff' }} />
-                    <Text strong style={{ fontSize: 15 }}>
-                      🔧 Especificaciones Técnicas ({categorySpecs.length} campos)
-                    </Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      (Campos específicos para {categories.find(c => c.value === selectedCategory)?.label})
-                    </Text>
-                  </Space>
-                }
-                key="specs"
+            <Col xs={24} md={12}>
+              <Form.Item
+                name="barcode"
+                label="Código de Barras / SKU"
+                rules={[{ required: true, message: 'Ingrese el código' }]}
               >
-                <Row gutter={16}>
-                  {categorySpecs.map((spec, index) => (
-                    <Col span={categorySpecs.length === 1 ? 24 : 12} key={spec.field}>
-                      <Form.Item
-                        name={spec.field}
-                        label={spec.label}
-                        rules={spec.required ? [{ required: true, message: `${spec.label} es requerido` }] : []}
-                      >
-                        {renderSpecificationField(spec)}
-                      </Form.Item>
-                    </Col>
-                  ))}
-                </Row>
-              </Panel>
-            </Collapse>
-          )}
+                <Input placeholder="Ej: 123456789" size="large" />
+              </Form.Item>
+            </Col>
 
-          {/* Precios */}
-          <div>
-            <Text strong style={{ fontSize: 15 }}>
-              💰 Precios
-            </Text>
-            <Divider style={{ margin: '8px 0' }} />
+            <Col xs={24} md={12}>
+              <Form.Item
+                name="name"
+                label="Nombre del Producto"
+                rules={[{ required: true, message: 'Ingrese el nombre' }]}
+              >
+                <Input placeholder="Ej: Filtro de aceite W712/73" size="large" />
+              </Form.Item>
+            </Col>
 
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="costPrice"
-                  label="Precio de Costo"
-                  tooltip="Cuánto te cuesta a ti este producto"
+            <Col xs={24}>
+              <Form.Item name="description" label="Descripción">
+                <TextArea
+                  rows={2}
+                  placeholder="Descripción detallada del producto..."
+                  maxLength={500}
+                  showCount
+                />
+              </Form.Item>
+            </Col>
+
+            <Col xs={24} md={12}>
+              <Form.Item
+                name="category"
+                label="Categoría"
+                rules={[{ required: true, message: 'Seleccione una categoría' }]}
+              >
+                <Select
+                  placeholder="Seleccionar categoría"
+                  size="large"
+                  onChange={handleCategoryChange}
                 >
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    min={0}
-                    prefix="$"
-                    precision={0}
-                    size="large"
-                    placeholder="0"
-                    formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
-                    parser={(value) => value!.replace(/\./g, '')}
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="price"
-                  label="Precio de Venta"
-                  rules={[{ required: true, message: 'Ingrese el precio de venta' }]}
-                  tooltip="Precio al que vendes el producto"
-                >
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    min={0}
-                    prefix="$"
-                    precision={0}
-                    size="large"
-                    placeholder="0"
-                    formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
-                    parser={(value) => value!.replace(/\./g, '')}
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
+                  <Select.Option value="lubricantes">🛢️ Lubricantes</Select.Option>
+                  <Select.Option value="filtros">🔍 Filtros</Select.Option>
+                  <Select.Option value="frenos">🛑 Frenos</Select.Option>
+                  <Select.Option value="suspension">⚙️ Suspensión</Select.Option>
+                  <Select.Option value="electrico">⚡ Eléctrico</Select.Option>
+                  <Select.Option value="neumaticos">⚫ Neumáticos</Select.Option>
+                  <Select.Option value="repuestos">🔧 Repuestos</Select.Option>
+                  <Select.Option value="herramientas">🔨 Herramientas</Select.Option>
+                  <Select.Option value="otros">📦 Otros</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
 
-            <Form.Item noStyle shouldUpdate={(prevValues, currentValues) => 
-              prevValues.costPrice !== currentValues.costPrice || 
-              prevValues.price !== currentValues.price
-            }>
-              {({ getFieldValue }) => {
-                const cost = getFieldValue('costPrice') || 0;
-                const price = getFieldValue('price') || 0;
-                const margin = cost > 0 ? ((price - cost) / cost) * 100 : 0;
-                
-                return margin > 0 ? (
-                  <div style={{ marginTop: -8, marginBottom: 16 }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      Margen de ganancia: <Text strong style={{ color: margin > 30 ? '#52c41a' : '#faad14' }}>
-                        {margin.toFixed(1)}%
-                      </Text>
-                    </Text>
-                  </div>
-                ) : null;
-              }}
-            </Form.Item>
-          </div>
+            <Col xs={24} md={12}>
+              <Form.Item name="location" label="Ubicación en Bodega">
+                <Input placeholder="Ej: Estante A3, Rack 5" size="large" />
+              </Form.Item>
+            </Col>
 
-          {/* Stock */}
-          <div>
-            <Text strong style={{ fontSize: 15 }}>
-              📦 Control de Stock
-            </Text>
-            <Divider style={{ margin: '8px 0' }} />
+            {/* Especificaciones técnicas según categoría */}
+            {renderSpecifications()}
 
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="stock"
-                  label="Stock Actual"
-                  rules={[{ required: true, message: 'Ingrese el stock' }]}
-                >
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    min={0}
-                    size="large"
-                    placeholder="0"
-                    suffix="unidades"
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="minStock"
-                  label="Stock Mínimo"
-                  rules={[{ required: true, message: 'Ingrese el stock mínimo' }]}
-                  tooltip="Recibirás una alerta cuando el stock sea menor a este valor"
-                >
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    min={0}
-                    size="large"
-                    placeholder="0"
-                    suffix="unidades"
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
-          </div>
+            <Col xs={24} md={8}>
+              <Form.Item
+                name="price"
+                label="Precio Venta"
+                rules={[{ required: true, message: 'Ingrese el precio' }]}
+              >
+                <InputNumber
+                  style={{ width: '100%' }}
+                  min={0}
+                  prefix="$"
+                  precision={0}
+                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+                  parser={(value) => value!.replace(/\./g, '')}
+                  placeholder="0"
+                  size="large"
+                />
+              </Form.Item>
+            </Col>
 
-          {/* Ubicación y Proveedor */}
-          <div>
-            <Text strong style={{ fontSize: 15 }}>
-              Ubicación y Proveedor
-            </Text>
-            <Divider style={{ margin: '8px 0' }} />
+            <Col xs={24} md={8}>
+              <Form.Item
+                name="stock"
+                label="Stock Inicial"
+                rules={[{ required: true, message: 'Ingrese el stock' }]}
+              >
+                <InputNumber
+                  style={{ width: '100%' }}
+                  min={0}
+                  placeholder="0"
+                  size="large"
+                />
+              </Form.Item>
+            </Col>
 
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="location" label="Ubicación en Bodega">
-                  <Input
-                    placeholder="Ej: Estante A-3, Bodega 2"
-                    size="large"
-                    prefix={<InboxOutlined />}
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="supplier" label="Proveedor">
-                  <Input
-                    placeholder="Ej: Repuestos Chile S.A."
-                    size="large"
-                    prefix={<ShopOutlined />}
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
-          </div>
-        </Space>
-      </Form>
-    </Modal>
+            <Col xs={24} md={8}>
+              <Form.Item name="minStock" label="Stock Mínimo" initialValue={5}>
+                <InputNumber
+                  style={{ width: '100%' }}
+                  min={0}
+                  placeholder="5"
+                  size="large"
+                />
+              </Form.Item>
+            </Col>
+
+            <Col xs={24}>
+              <Form.Item name="isActive" label="Producto Activo" valuePropName="checked" initialValue={true}>
+                <Switch checkedChildren="Sí" unCheckedChildren="No" />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
+
+      {/* Preview Modal */}
+      <Image
+        preview={{
+          visible: previewOpen,
+          onVisibleChange: (visible) => setPreviewOpen(visible),
+        }}
+        src={previewImage}
+        style={{ display: 'none' }}
+      />
+    </>
   );
 };
 

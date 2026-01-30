@@ -226,9 +226,22 @@ const QuoteDetail: React.FC = () => {
   const subtotalServices = services.reduce((sum, s) => sum + (s.price || 0), 0);
   const subtotalParts = parts.reduce((sum, p) => sum + (p.price || 0) * (p.quantity || 1), 0);
   const subtotalExternalParts = externalParts.reduce((sum, p) => sum + (p.price || 0) * (p.quantity || 1), 0);
-  const subtotal = subtotalServices + subtotalParts + subtotalExternalParts;
-  const iva = Math.round(subtotal * 0.19);
-  const total = subtotal + iva;
+  
+  // ✅ ARREGLO: Si proposedWork es texto plano, usar estimatedCost directamente
+  let subtotal, iva, total;
+  
+  if (proposedWorkData.isJSON) {
+    // Formato JSON: calcular desde los items
+    subtotal = subtotalServices + subtotalParts + subtotalExternalParts;
+    iva = Math.round(subtotal * 0.19);
+    total = subtotal + iva;
+  } else {
+    // Formato texto: usar estimatedCost que viene del backend
+    total = quote.estimatedCost;
+    // Calcular hacia atrás el IVA y subtotal
+    subtotal = Math.round(total / 1.19);
+    iva = total - subtotal;
+  }
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>

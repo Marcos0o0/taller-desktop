@@ -16,6 +16,7 @@ import {
   Tooltip,
   Popconfirm,
   Alert,
+  Image,
 } from 'antd';
 import {
   PlusOutlined,
@@ -340,11 +341,51 @@ const InventoryList: React.FC = () => {
 
   const columns = [
     {
+      title: 'Foto',
+      key: 'image',
+      width: 80,
+      fixed: 'left' as const,
+      render: (record: Product) => (
+        record.imageUrl ? (
+          <Image
+            src={record.imageUrl}
+            alt={record.name}
+            width={70}
+            height={70}
+            style={{ 
+              objectFit: 'cover', 
+              borderRadius: '8px',
+              border: '1px solid #f0f0f0'
+            }}
+            preview={{
+              mask: <div style={{ fontSize: 12 }}>Ver</div>,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 60,
+              height: 60,
+              borderRadius: '8px',
+              border: '1px dashed #d9d9d9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#fafafa',
+            }}
+          >
+            <Text type="secondary" style={{ fontSize: 20 }}>
+              📦
+            </Text>
+          </div>
+        )
+      ),
+    },
+    {
       title: 'Código',
       dataIndex: 'barcode',
       key: 'barcode',
       width: 130,
-      fixed: 'left' as const,
       render: (text: string) => (
         <Space>
           <BarcodeOutlined />
@@ -404,13 +445,7 @@ const InventoryList: React.FC = () => {
       ),
       sorter: (a: Product, b: Product) => a.price - b.price,
     },
-    {
-      title: 'Ubicación',
-      dataIndex: 'location',
-      key: 'location',
-      width: 120,
-      render: (location: string) => location || <Text type="secondary">-</Text>,
-    },
+
     {
       title: 'Acciones',
       key: 'actions',
